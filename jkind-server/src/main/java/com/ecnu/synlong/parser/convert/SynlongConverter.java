@@ -2,10 +2,11 @@ package com.ecnu.synlong.parser.convert;
 
 import com.ecnu.synlong.parser.synlong.gen.SynlongLexer;
 import com.ecnu.synlong.parser.synlong.gen.SynlongParser;
-import lombok.extern.slf4j.Slf4j;
 import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.atn.PredictionMode;
 import org.antlr.v4.runtime.tree.ParseTree;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -14,8 +15,9 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.nio.charset.StandardCharsets;
 
-@Slf4j
 public class SynlongConverter {
+	
+	private static final Logger log = LoggerFactory.getLogger(SynlongConverter.class);
     /**
      * 将Synlong代码转换为Lustre代码
      * @param synlongCode Synlong代码字符串

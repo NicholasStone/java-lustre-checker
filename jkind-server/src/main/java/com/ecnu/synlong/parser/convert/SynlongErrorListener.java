@@ -1,12 +1,15 @@
 package com.ecnu.synlong.parser.convert;
 
-import lombok.extern.slf4j.Slf4j;
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.RecognitionException;
 import org.antlr.v4.runtime.Recognizer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-@Slf4j
 public class SynlongErrorListener extends BaseErrorListener {
+	
+	private static final Logger log = LoggerFactory.getLogger(SynlongErrorListener.class);
+	
     @Override
     public void syntaxError(Recognizer<?, ?> recognizer,
                             Object offendingSymbol,

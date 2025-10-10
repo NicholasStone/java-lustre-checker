@@ -20,19 +20,22 @@ import jkind.translation.InlineSimpleEquations;
 import jkind.translation.Specification;
 import jkind.translation.Translate;
 import jkind.util.Util;
-import lombok.extern.slf4j.Slf4j;
+import org.antlr.v4.runtime.ANTLRErrorListener;
 import org.antlr.v4.runtime.ANTLRErrorListener;
 import org.antlr.v4.runtime.ANTLRInputStream;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CommonTokenStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
  * 抄的jkind代码中的jkind/src/jkind/JKind.java
  */
 @Service
-@Slf4j
 public class LustreService {
+	
+	private static final Logger log = LoggerFactory.getLogger(LustreService.class);
 
     public CheckResult check(String[] args) {
         try {

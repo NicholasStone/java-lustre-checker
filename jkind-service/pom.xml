@@ -6,7 +6,7 @@
     <version>1.0-SNAPSHOT</version>
     <parent>
         <groupId>com.ecnu.aiyowei</groupId>
-        <artifactId>jkind</artifactId>
+        <artifactId>java-lustre-checker</artifactId>
         <version>1.0-SNAPSHOT</version>
     </parent>
     <packaging>jar</packaging>

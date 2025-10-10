@@ -29,5 +29,12 @@ public class CheckResult {
 	public static CheckResult fail(String result) {
 		return new CheckResult(CheckStatus.ERROR, result);
 	}
-
+	
+	public CheckStatus getStatus() {
+		return status;
+	}
+	
+	public String getResult() {
+		return result;
+	}
 }
