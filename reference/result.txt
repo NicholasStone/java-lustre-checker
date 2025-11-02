@@ -1,53 +1,65 @@
-type State = enum {SpeedUp, Keep, SpeedDown};
+type State = enum {NormalOperation, PowerIncrease, PowerReduction};
 
-node speed_up(v : int) returns (vt : int);
+node reactor_power_increase(power_level : int) returns (adjusted_power : int);
 var
 	state : State;
-	limit : int;
+	NormalOperation_safety_limit : int;
+	PowerReduction_scram_threshold : int;
+	PowerIncrease_critical_threshold : int;
 let
-	vt = v + 10;
+	adjusted_power = power_level + 10;
 tel
 
-node speed_down(v : int) returns (vt : int);
+node reactor_power_decrease(power_level : int) returns (adjusted_power : int);
 var
 	state : State;
-	limit : int;
+	NormalOperation_safety_limit : int;
+	PowerReduction_scram_threshold : int;
+	PowerIncrease_critical_threshold : int;
 let
-	vt = v - 10;
+	adjusted_power = power_level - 10;
 tel
 
-node keep(v : int) returns (vt : int);
+node maintain_power(power_level : int) returns (adjusted_power : int);
 var
 	state : State;
-	limit : int;
+	NormalOperation_safety_limit : int;
+	PowerReduction_scram_threshold : int;
+	PowerIncrease_critical_threshold : int;
 let
-	vt = v;
+	adjusted_power = power_level;
 tel
 
-node N(v : int) returns ();
+node RPS_Controller(power_level : int) returns ();
 var
 	state : State;
-	limit : int;
+	NormalOperation_safety_limit : int;
+	PowerReduction_scram_threshold : int;
+	PowerIncrease_critical_threshold : int;
 let
-	state = if (pre(state) = Keep) then Keep
-	else if (pre(state) = SpeedUp and v >= 150) then SpeedDown
-	else if (pre(state) = SpeedUp and v <= 150 and v >= 50) then Keep
-	else if (pre(state) = SpeedUp and v <= limit) then SpeedUp
-	else if (pre(state) = SpeedUp and v <= limit) then SpeedUp
-	else if (pre(state) = Keep and v >= 100) then SpeedDown
-	else if (pre(state) = Keep and v <= 100) then SpeedUp
-	else if (pre(state) = Keep and v >= limit) then Keep
-	else if (pre(state) = Keep and v >= limit) then Keep
-	else if (pre(state) = SpeedDown and v <= 150 and v >= 50) then Keep
-	else if (pre(state) = SpeedDown and v <= 100) then SpeedUp
-	else if (pre(state) = SpeedDown and v <= limit) then SpeedDown
-	else if (pre(state) = SpeedDown and v <= limit) then SpeedDown
+	state = if (pre(state) = NormalOperation) then NormalOperation
+	else if (pre(state) = NormalOperation and power_level >= 234) then PowerReduction
+	else if (pre(state) = NormalOperation and power_level <= 222) then PowerIncrease
+	else if (pre(state) = NormalOperation and power_level >= safety_limit) then NormalOperation
+	else if (pre(state) = NormalOperation and power_level >= safety_limit) then NormalOperation
+	else if (pre(state) = PowerIncrease and power_level >= 150) then PowerReduction
+	else if (pre(state) = PowerIncrease and power_level <= 150 and power_level >= 50) then NormalOperation
+	else if (pre(state) = PowerIncrease and power_level <= critical_threshold) then PowerIncrease
+	else if (pre(state) = PowerIncrease and power_level <= critical_threshold) then PowerIncrease
+	else if (pre(state) = PowerReduction and power_level <= 15220 and power_level >= 50) then NormalOperation
+	else if (pre(state) = PowerReduction and power_level <= 100) then PowerIncrease
+	else if (pre(state) = PowerReduction and power_level <= scram_threshold) then PowerReduction
+	else if (pre(state) = PowerReduction and power_level <= scram_threshold) then PowerReduction
 	else pre(state);
 
-	-- Variable v assignments (merged)
-	v = if (state = SpeedUp) then speed_up(v) else if (state = Keep) then keep(v) else if (state = SpeedDown) then speed_down(v) else pre(v);
-	-- Variable limit assignments (merged)
-	limit = if (state = SpeedUp) then 150 else if (state = Keep) then 200 else if (state = SpeedDown) then 50 else pre(limit);
+	-- Variable NormalOperation_safety_limit assignment
+	NormalOperation_safety_limit = if (state = NormalOperation) then 22300 else pre(NormalOperation_safety_limit);
+	-- Variable PowerReduction_scram_threshold assignment
+	PowerReduction_scram_threshold = if (state = PowerReduction) then 50 else pre(PowerReduction_scram_threshold);
+	-- Variable PowerIncrease_critical_threshold assignment
+	PowerIncrease_critical_threshold = if (state = PowerIncrease) then 150 else pre(PowerIncrease_critical_threshold);
+	-- Variable power_level assignments (merged)
+	power_level = if (state = NormalOperation) then maintain_power(power_level) else if (state = PowerIncrease) then reactor_power_increase(power_level) else if (state = PowerReduction) then reactor_power_decrease(power_level) else pre(power_level);
 
 	-- Return statement handled in state machine logic;
 tel

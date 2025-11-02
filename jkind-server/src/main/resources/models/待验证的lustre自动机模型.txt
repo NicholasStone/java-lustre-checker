@@ -1,0 +1,42 @@
+node speed_up(v: int) returns (vt: int)
+let
+	vt = v + 10;
+tel
+
+node speed_down(v: int) returns (vt: int)
+let
+	vt = v - 10;
+tel
+
+node keep(v: int) returns (vt: int)
+let
+    vt = v;
+tel
+
+node N(v: int) returns ()
+let
+    automaton Car
+        initial state Keep
+        unless
+            if v >= 100 restart SpeedDown;
+            if v <= 100 restart SpeedUp;
+        var limit: int;
+        let v = keep(v); limit = 200; tel
+        until 
+            if v >= limit restart Keep;
+	state SpeedDown
+        unless 
+            if v <= 150 and v >= 50 restart Keep;
+            if v <= 100 restart SpeedUp;
+        var limit: int; 
+        let v = speed_down(v); limit = 50; tel
+        until if v <= limit restart SpeedDown;
+	state SpeedUp
+        unless 
+            if v >= 150 restart SpeedDown;
+            if v <= 150 and v >= 50 restart Keep;
+        var limit: int;
+        let v = speed_up(v); limit = 150; tel
+        until if v <= limit restart SpeedUp;
+    returns v;
+tel;

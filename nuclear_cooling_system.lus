@@ -1,0 +1,205 @@
+-- 核反应堆冷却子系统控制系统
+-- 模拟核反应堆主冷却泵的监控和控制逻辑
+
+-- 物理常量定义
+const
+    -- 冷却水温度阈值（摄氏度）
+    COOLANT_TEMP_LOW : real = 25.0;
+    COOLANT_TEMP_HIGH : real = 85.0;
+    -- 压力阈值（MPa）
+    COOLANT_PRESSURE_LOW : real = 0.5;
+    COOLANT_PRESSURE_HIGH : real = 15.5;
+    -- 流量阈值（m³/s）
+    COOLANT_FLOW_LOW : real = 0.1;
+    COOLANT_FLOW_NORMAL : real = 2.5;
+    -- 系统时间常量
+    SYSTEM_TIME : real = 30.0;
+    -- 模拟量最小值
+    MINFLOAT : real = 8.5E-37;
+    -- 模拟量最大值
+    MAXFLOAT : real = 3.3E+38;
+    -- 状态标志
+    NORMAL_OPERATION : bool = false;
+    EMERGENCY_STATE : bool = true;
+    -- 泵控制信号
+    PUMP_ON : bool = true;
+    PUMP_OFF : bool = false;
+
+-- 类型定义
+type
+    -- 模拟量传感器数据，包含数值和状态
+    analog = struct {
+        value : real,
+        status : bool
+    };
+    
+    -- 数字量传感器数据，包含数值和状态
+    binary = struct {
+        value : bool,
+        status : bool
+    };
+    
+    -- 冷却泵状态
+    PumpStatus = struct {
+        isRunning : bool,
+        currentSpeed : real,
+        isHealthy : bool
+    };
+    
+    -- 系统安全状态
+    SafetyStatus = struct {
+        isSafe : bool,
+        alertLevel : real,
+        emergencyStop : bool
+    };
+
+-- 冷却泵控制系统主节点
+node ReactorCoolingControl(
+    coolantTemp : analog;           -- 冷却水温度传感器
+    coolantPressure : analog;       -- 冷却水压力传感器  
+    coolantFlow : analog;           -- 冷却水流量传感器
+    pumpStatus : binary;            -- 主泵运行状态
+    emergencyStop : binary          -- 紧急停机信号
+) returns (
+    pumpControl : analog last = {value: 0.0, status: false}
+)
+let
+    automaton CoolingSystemSM
+        initial state SystemInitialization
+        unless
+            if NORMAL_OPERATION = coolantTemp.status and NORMAL_OPERATION = coolantPressure.status
+                resume NormalOperation;    -- 传感器正常 → 进入正常运行
+            if EMERGENCY_STATE = emergencyStop.value and NORMAL_OPERATION = emergencyStop.status
+                restart EmergencyShutdown; -- 紧急停机信号 → 进入紧急停机
+        
+        var
+            initPumpSpeed : real;
+            systemReady : bool;
+            safetyCheck : SafetyStatus;
+            
+        let
+            -- 系统初始化时的泵控制
+            pumpControl = (make analog)(initPumpSpeed, systemReady);
+            initPumpSpeed = 0.0;  -- 初始速度为0
+            systemReady = NORMAL_OPERATION;
+            safetyCheck = (make SafetyStatus)(NORMAL_OPERATION, 0.0, PUMP_OFF);
+        tel
+
+    state NormalOperation
+    unless
+        if COOLANT_TEMP_HIGH < coolantTemp.value and NORMAL_OPERATION = coolantTemp.status
+            restart OverheatProtection;    -- 温度过高 → 过热保护
+        if EMERGENCY_STATE = emergencyStop.value or EMERGENCY_STATE = emergencyStop.status
+            restart EmergencyShutdown;     -- 紧急停机 → 紧急停机模式
+    
+    var
+        optimalSpeed : real;
+        flowAdjustment : real;
+        pumpHealth : PumpStatus;
+        
+    let
+        -- 正常运行时根据流量调整泵速
+        flowAdjustment = coolantFlow.value * 0.4;  -- 流量调节系数
+        optimalSpeed = COOLANT_FLOW_NORMAL + flowAdjustment;
+        
+        -- 使用flatten函数分解泵状态结构体
+        pumpHealth = (make PumpStatus)(PUMP_ON, optimalSpeed, NORMAL_OPERATION);
+        pumpRunning, currentSpeed, pumpHealthy = flatten_PumpStatus(pumpHealth);
+        
+        -- 根据泵健康状态决定控制输出
+        pumpControl = (make analog)(currentSpeed, pumpHealthy);
+    tel
+
+    state OverheatProtection
+    unless
+        if COOLANT_TEMP_LOW > coolantTemp.value and NORMAL_OPERATION = coolantTemp.status
+            restart NormalOperation;       -- 温度恢复正常 → 回到正常运行
+        if EMERGENCY_STATE = coolantTemp.status
+            restart EmergencyShutdown;     -- 传感器故障 → 紧急停机
+    
+    var
+        emergencySpeed : real;
+        tempFeedback : real;
+        safetyLevel : real;
+        
+    let
+        -- 过热保护模式：降低泵速，增加冷却
+        tempFeedback = coolantTemp.value - COOLANT_TEMP_HIGH;
+        emergencySpeed = COOLANT_FLOW_NORMAL - (tempFeedback * 0.1);
+        safetyLevel = if emergencySpeed < COOLANT_FLOW_LOW then 1.0 else 0.5;
+        
+        -- 使用switch语句根据安全级别选择控制策略
+        pumpControl = switch safetyLevel of
+            | 0.5 -> (make analog)(emergencySpeed, NORMAL_OPERATION)
+            | 1.0 -> (make analog)(COOLANT_FLOW_LOW, EMERGENCY_STATE)
+            | _ -> (make analog)(0.0, EMERGENCY_STATE)
+        end;
+    tel
+
+    state EmergencyShutdown
+    unless
+        if NORMAL_OPERATION = emergencyStop.value and NORMAL_OPERATION = emergencyStop.status
+            restart SystemInitialization;  -- 紧急状态解除 → 重新初始化
+        if NORMAL_OPERATION = coolantTemp.status and NORMAL_OPERATION = coolantPressure.status
+            resume NormalOperation;        -- 所有传感器正常 → 恢复运行
+    
+    var
+        shutdownSpeed : real;
+        lastSafeSpeed : real;
+        shutdownTime : real;
+        
+    let
+        -- 紧急停机：使用last操作符获取上次安全状态
+        lastSafeSpeed = last pumpControl.value;
+        shutdownSpeed = lastSafeSpeed * 0.1;  -- 逐步降速
+        shutdownTime = SYSTEM_TIME;
+        
+        -- 紧急停机控制策略
+        pumpControl = (make analog)(shutdownSpeed, EMERGENCY_STATE);
+    tel
+
+    returns pumpControl;
+tel
+
+-- 辅助函数：分解PumpStatus结构体
+node flatten_PumpStatus(pump : PumpStatus) returns (
+    isRunning : bool,
+    currentSpeed : real,
+    isHealthy : bool
+);
+let
+    isRunning = pump.isRunning;
+    currentSpeed = pump.currentSpeed;
+    isHealthy = pump.isHealthy;
+tel
+
+-- 辅助函数：创建PumpStatus结构体
+node make_PumpStatus(
+    isRunning : bool,
+    currentSpeed : real,
+    isHealthy : bool
+) returns (result : PumpStatus);
+let
+    result = result {isRunning := isRunning};
+    -- result = result {currentSpeed := currentSpeed};
+    -- result = result {isHealthy := isHealthy};
+tel
+
+-- 辅助函数：创建SafetyStatus结构体
+node make_SafetyStatus(
+    isSafe : bool,
+    alertLevel : real,
+    emergencyStop : bool
+) returns (result : SafetyStatus);
+let
+    result = result {isSafe := isSafe};
+    -- result = result {alertLevel := alertLevel};
+    -- result = result {emergencyStop := emergencyStop};
+tel
+
+-- 辅助函数：创建analog结构体
+node make_analog(value : real, status : bool) returns (result : analog);
+let
+    result = result {value := value};
+    -- result = result {status := status};
+tel

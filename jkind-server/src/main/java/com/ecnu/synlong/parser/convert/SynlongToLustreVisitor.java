@@ -231,22 +231,38 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
      * 收集状态转换信息
      */
     private void collectStateTransitions(String stateName, SynlongParser.State_declContext stateDecl) {
+        Set<String> processedTransitions = new HashSet<>(); // 避免重复
+        
         // 收集unless转换
         for (int i = 0; i < stateDecl.getChildCount(); i++) {
             if ("unless".equals(stateDecl.getChild(i).getText())) {
                 for (int j = i + 1; j < stateDecl.getChildCount(); j++) {
                     if (stateDecl.getChild(j) instanceof SynlongParser.TransitionContext) {
                         SynlongParser.TransitionContext trans = (SynlongParser.TransitionContext) stateDecl.getChild(j);
-                        String transition = "unless: " + visit(trans) + " -> " + trans.ID().getText();
-                        context.addStateTransition(stateName, transition);
+                        String condition = visit(trans);
+                        String target = trans.ID().getText();
+                        String transition = "unless: " + condition + " -> " + target;
+                        
+                        // 避免重复添加相同的转换
+                        if (!processedTransitions.contains(transition)) {
+                            processedTransitions.add(transition);
+                            context.addStateTransition(stateName, transition);
+                        }
                     }
                 }
             } else if ("until".equals(stateDecl.getChild(i).getText())) {
                 for (int j = i + 1; j < stateDecl.getChildCount(); j++) {
                     if (stateDecl.getChild(j) instanceof SynlongParser.TransitionContext) {
                         SynlongParser.TransitionContext trans = (SynlongParser.TransitionContext) stateDecl.getChild(j);
-                        String transition = "until: " + visit(trans) + " -> " + trans.ID().getText();
-                        context.addStateTransition(stateName, transition);
+                        String condition = visit(trans);
+                        String target = trans.ID().getText();
+                        String transition = "until: " + condition + " -> " + target;
+                        
+                        // 避免重复添加相同的转换
+                        if (!processedTransitions.contains(transition)) {
+                            processedTransitions.add(transition);
+                            context.addStateTransition(stateName, transition);
+                        }
                     }
                 }
             }

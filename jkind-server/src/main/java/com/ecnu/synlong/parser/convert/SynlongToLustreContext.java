@@ -57,6 +57,10 @@ public class SynlongToLustreContext {
     public boolean isGlobalVariable(String var) {
         return globalVars.contains(var);
     }
+    
+    public Set<String> getGlobalVars() {
+        return Collections.unmodifiableSet(globalVars);
+    }
 
     public void setInitialState(String state) {
         this.initialState = state;

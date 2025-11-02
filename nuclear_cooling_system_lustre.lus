@@ -1,0 +1,139 @@
+-- 核反应堆冷却子系统控制系统 - Lustre转换结果
+-- 展示Synlong到Lustre的完整转换过程
+
+-- 状态枚举类型
+type State = enum {SystemInitialization, NormalOperation, OverheatProtection, EmergencyShutdown};
+
+-- 结构体类型定义
+type analog = struct {value : real; status : bool};
+type binary = struct {value : bool; status : bool};
+type PumpStatus = struct {isRunning : bool; currentSpeed : real; isHealthy : bool};
+type SafetyStatus = struct {isSafe : bool; alertLevel : real; emergencyStop : bool};
+
+-- 常量定义
+const COOLANT_TEMP_LOW : real = 25.0;
+const COOLANT_TEMP_HIGH : real = 85.0;
+const COOLANT_PRESSURE_LOW : real = 0.5;
+const COOLANT_PRESSURE_HIGH : real = 15.5;
+const COOLANT_FLOW_LOW : real = 0.1;
+const COOLANT_FLOW_NORMAL : real = 2.5;
+const SYSTEM_TIME : real = 30.0;
+const MINFLOAT : real = 8.5E-37;
+const MAXFLOAT : real = 3.3E+38;
+const NORMAL_OPERATION : bool = false;
+const EMERGENCY_STATE : bool = true;
+const PUMP_ON : bool = true;
+const PUMP_OFF : bool = false;
+
+-- 结构体构造函数
+node make_analog(value : real; status : bool) returns (result : analog);
+let
+	result = result {value := value};
+	-- result = result {status := status};
+tel;
+
+node make_PumpStatus(isRunning : bool; currentSpeed : real; isHealthy : bool) returns (result : PumpStatus);
+let
+	result = result {isRunning := isRunning};
+	-- result = result {currentSpeed := currentSpeed};
+	-- result = result {isHealthy := isHealthy};
+tel;
+
+node make_SafetyStatus(isSafe : bool; alertLevel : real; emergencyStop : bool) returns (result : SafetyStatus);
+let
+	result = result {isSafe := isSafe};
+	-- result = result {alertLevel := alertLevel};
+	-- result = result {emergencyStop := emergencyStop};
+tel;
+
+-- 结构体分解函数
+node flatten_PumpStatus(pump : PumpStatus) returns (isRunning : bool; currentSpeed : real; isHealthy : bool);
+let
+	isRunning = pump.isRunning;
+	currentSpeed = pump.currentSpeed;
+	isHealthy = pump.isHealthy;
+tel;
+
+-- 主控制节点
+node ReactorCoolingControl(coolantTemp : analog; coolantPressure : analog; coolantFlow : analog; pumpStatus : binary; emergencyStop : binary) returns (pumpControl : analog);
+var
+	state : State;
+	-- 全局变量（不加前缀）
+	coolantTemp : analog;
+	coolantPressure : analog;
+	coolantFlow : analog;
+	pumpStatus : binary;
+	emergencyStop : binary;
+	pumpControl : analog;
+	
+	-- 状态局部变量（加前缀）
+	SystemInitialization_initPumpSpeed : real;
+	SystemInitialization_systemReady : bool;
+	SystemInitialization_safetyCheck : SafetyStatus;
+	NormalOperation_optimalSpeed : real;
+	NormalOperation_flowAdjustment : real;
+	NormalOperation_pumpHealth : PumpStatus;
+	OverheatProtection_emergencySpeed : real;
+	OverheatProtection_tempFeedback : real;
+	OverheatProtection_safetyLevel : real;
+	EmergencyShutdown_shutdownSpeed : real;
+	EmergencyShutdown_lastSafeSpeed : real;
+	EmergencyShutdown_shutdownTime : real;
+
+let
+	-- 状态转换逻辑
+	state = if (pre(state) = SystemInitialization) then SystemInitialization
+	else if (pre(state) = SystemInitialization and NORMAL_OPERATION = coolantPressure.status and NORMAL_OPERATION = coolantTemp.status) then NormalOperation
+	else if (pre(state) = SystemInitialization and EMERGENCY_STATE = emergencyStop.value and NORMAL_OPERATION = emergencyStop.status) then EmergencyShutdown
+	else if (pre(state) = NormalOperation and COOLANT_TEMP_HIGH < coolantTemp.value and NORMAL_OPERATION = coolantTemp.status) then OverheatProtection
+	else if (pre(state) = NormalOperation and EMERGENCY_STATE = emergencyStop.value or EMERGENCY_STATE = emergencyStop.status) then EmergencyShutdown
+	else if (pre(state) = OverheatProtection and COOLANT_TEMP_LOW > coolantTemp.value and NORMAL_OPERATION = coolantTemp.status) then NormalOperation
+	else if (pre(state) = OverheatProtection and EMERGENCY_STATE = coolantTemp.status) then EmergencyShutdown
+	else if (pre(state) = EmergencyShutdown and NORMAL_OPERATION = emergencyStop.value and NORMAL_OPERATION = emergencyStop.status) then SystemInitialization
+	else if (pre(state) = EmergencyShutdown and NORMAL_OPERATION = coolantTemp.status and NORMAL_OPERATION = coolantPressure.status) then NormalOperation
+	else pre(state);
+
+	-- Variable SystemInitialization_initPumpSpeed assignment
+	SystemInitialization_initPumpSpeed = if (state = SystemInitialization) then 0.0 else pre(SystemInitialization_initPumpSpeed);
+
+	-- Variable SystemInitialization_systemReady assignment
+	SystemInitialization_systemReady = if (state = SystemInitialization) then NORMAL_OPERATION else pre(SystemInitialization_systemReady);
+
+	-- Variable SystemInitialization_safetyCheck assignment
+	SystemInitialization_safetyCheck = if (state = SystemInitialization) then make_SafetyStatus(NORMAL_OPERATION, 0.0, PUMP_OFF) else pre(SystemInitialization_safetyCheck);
+
+	-- Variable NormalOperation_flowAdjustment assignment
+	NormalOperation_flowAdjustment = if (state = NormalOperation) then coolantFlow.value * 0.4 else pre(NormalOperation_flowAdjustment);
+
+	-- Variable NormalOperation_optimalSpeed assignment
+	NormalOperation_optimalSpeed = if (state = NormalOperation) then COOLANT_FLOW_NORMAL + NormalOperation_flowAdjustment else pre(NormalOperation_optimalSpeed);
+
+	-- Variable NormalOperation_pumpHealth assignment
+	NormalOperation_pumpHealth = if (state = NormalOperation) then make_PumpStatus(PUMP_ON, NormalOperation_optimalSpeed, NORMAL_OPERATION) else pre(NormalOperation_pumpHealth);
+
+	-- Variable OverheatProtection_tempFeedback assignment
+	OverheatProtection_tempFeedback = if (state = OverheatProtection) then coolantTemp.value - COOLANT_TEMP_HIGH else pre(OverheatProtection_tempFeedback);
+
+	-- Variable OverheatProtection_emergencySpeed assignment
+	OverheatProtection_emergencySpeed = if (state = OverheatProtection) then COOLANT_FLOW_NORMAL - (OverheatProtection_tempFeedback * 0.1) else pre(OverheatProtection_emergencySpeed);
+
+	-- Variable OverheatProtection_safetyLevel assignment
+	OverheatProtection_safetyLevel = if (state = OverheatProtection) then if OverheatProtection_emergencySpeed < COOLANT_FLOW_LOW then 1.0 else 0.5 else pre(OverheatProtection_safetyLevel);
+
+	-- Variable EmergencyShutdown_lastSafeSpeed assignment
+	EmergencyShutdown_lastSafeSpeed = if (state = EmergencyShutdown) then pre(pumpControl.value) else pre(EmergencyShutdown_lastSafeSpeed);
+
+	-- Variable EmergencyShutdown_shutdownSpeed assignment
+	EmergencyShutdown_shutdownSpeed = if (state = EmergencyShutdown) then EmergencyShutdown_lastSafeSpeed * 0.1 else pre(EmergencyShutdown_shutdownSpeed);
+
+	-- Variable EmergencyShutdown_shutdownTime assignment
+	EmergencyShutdown_shutdownTime = if (state = EmergencyShutdown) then SYSTEM_TIME else pre(EmergencyShutdown_shutdownTime);
+
+	-- Variable pumpControl assignments (merged)
+	pumpControl = if (state = SystemInitialization) then make_analog(SystemInitialization_initPumpSpeed, SystemInitialization_systemReady) 
+	else if (state = NormalOperation) then make_analog(NormalOperation_optimalSpeed, flatten_PumpStatus(NormalOperation_pumpHealth).isHealthy)
+	else if (state = OverheatProtection) then if OverheatProtection_safetyLevel = 0.5 then make_analog(OverheatProtection_emergencySpeed, NORMAL_OPERATION) else if OverheatProtection_safetyLevel = 1.0 then make_analog(COOLANT_FLOW_LOW, EMERGENCY_STATE) else make_analog(0.0, EMERGENCY_STATE)
+	else if (state = EmergencyShutdown) then make_analog(EmergencyShutdown_shutdownSpeed, EMERGENCY_STATE)
+	else pre(pumpControl);
+
+tel

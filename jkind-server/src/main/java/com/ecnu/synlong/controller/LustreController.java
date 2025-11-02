@@ -7,12 +7,15 @@ import com.ecnu.synlong.common.BaseResponse;
 import com.ecnu.synlong.common.CheckStatus;
 import com.ecnu.synlong.service.LustreService;
 import com.ecnu.synlong.parser.convert.SynlongConverter;
+import com.ecnu.synlong.parser.convert.AutomatonConverter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Slf4j
 @RestController
 @RequestMapping("/lustre")
 public class LustreController {
@@ -49,7 +52,7 @@ public class LustreController {
     }
 
     /**
-     * 使用JKind进行Lustre模型的验证。新接口，直接返回给前端。
+     * 使用动态转换器将Lustre模型转换为自动机模型
      *
      * @param lustreFileParameter 包含Lustre模型的请求参数
      * @return 转化结果
@@ -60,21 +63,10 @@ public class LustreController {
         // lustre模型, 包含约束条件
         String program = lustreFileParameter.getFile();
 
-        // 只检查语法，不转化
-        SynlongConverter.convert(program);
+        // 使用动态转换器将Lustre代码转换为自动机模型
+        String automatonJson = AutomatonConverter.convertToAutomaton(program);
 
-        // 特殊测试用例：直接返回预置结果（只读一次从文件加载到 ConvertConstant）
-        if (program.contains("Nuclear")) {
-            return BaseResponse.success(CheckResult.success(ConvertConstant.NuclearResult));
-        }
-        if (program.contains("Car")) {
-            return BaseResponse.success(CheckResult.success(ConvertConstant.CarResult));
-        }
-        if (program.contains("SM1")) {
-            return BaseResponse.success(CheckResult.success(ConvertConstant.StmResult));
-        }
-
-        CheckResult result = CheckResult.success("");
+        CheckResult result = CheckResult.success(automatonJson);
         return BaseResponse.success(result);
     }
 }
