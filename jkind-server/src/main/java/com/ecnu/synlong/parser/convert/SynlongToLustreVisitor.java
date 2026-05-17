@@ -8,6 +8,55 @@ import java.math.BigDecimal;
 import java.util.*;
 
 public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
+    private static final Map<String, IteratorOperator> ITERATOR_OPERATORS = new HashMap<>();
+
+    static {
+        registerIteratorOperator("$+$", "+", 2);
+        registerIteratorOperator("+", "+", 2);
+        registerIteratorOperator("$-$", "-", 2);
+        registerIteratorOperator("-", "-", 2);
+        registerIteratorOperator("$*$", "*", 2);
+        registerIteratorOperator("*", "*", 2);
+        registerIteratorOperator("$/$", "/", 2);
+        registerIteratorOperator("/", "/", 2);
+        registerIteratorOperator("$mod$", "mod", 2);
+        registerIteratorOperator("mod", "mod", 2);
+        registerIteratorOperator("$div$", "div", 2);
+        registerIteratorOperator("div", "div", 2);
+        registerIteratorOperator("$=$", "=", 2);
+        registerIteratorOperator("=", "=", 2);
+        registerIteratorOperator("$<>$", "<>", 2);
+        registerIteratorOperator("<>", "<>", 2);
+        registerIteratorOperator("$<$", "<", 2);
+        registerIteratorOperator("<", "<", 2);
+        registerIteratorOperator("$>$", ">", 2);
+        registerIteratorOperator(">", ">", 2);
+        registerIteratorOperator("$<=$", "<=", 2);
+        registerIteratorOperator("<=", "<=", 2);
+        registerIteratorOperator("$>=$", ">=", 2);
+        registerIteratorOperator(">=", ">=", 2);
+        registerIteratorOperator("$and$", "and", 2);
+        registerIteratorOperator("and", "and", 2);
+        registerIteratorOperator("$or$", "or", 2);
+        registerIteratorOperator("or", "or", 2);
+        registerIteratorOperator("$xor$", "xor", 2);
+        registerIteratorOperator("xor", "xor", 2);
+    }
+
+    private static void registerIteratorOperator(String spelling, String normalized, int arity) {
+        ITERATOR_OPERATORS.put(spelling, new IteratorOperator(normalized, arity));
+    }
+
+    private static class IteratorOperator {
+        private final String normalized;
+        private final int arity;
+
+        private IteratorOperator(String normalized, int arity) {
+            this.normalized = normalized;
+            this.arity = arity;
+        }
+    }
+
     private final SynlongToLustreContext context;
 
     public SynlongToLustreVisitor(SynlongToLustreContext context) {
@@ -1367,38 +1416,153 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
 
     @Override
     public String visitIteratorApply(SynlongParser.IteratorApplyContext ctx) {
-        String iterator = visit(ctx.iterator());
-        String op = visit(ctx.prefix_operator());
-        String count = visit(ctx.const_expr());
-        String list = visit(ctx.list());
-        if (iterator != null && op != null && count != null && list != null) {
-            return "(" + iterator + " << " + op + "; " + count + " >>)(" + list + ")";
+        SynlongParser.Iterator_headerContext header = ctx.iterator_header();
+        String iterator = visit(header.iterator());
+        String op = visit(header.iterator_operator());
+        int count = parseIteratorCount(header.const_expr());
+        List<String> args = visitIteratorArgs(ctx.iterator_arg_list());
+
+        if ("map".equals(iterator)) {
+            return lowerMap(op, count, args);
         }
-        return "";
+        if ("fold".equals(iterator)) {
+            return lowerFold(op, count, args);
+        }
+        throw unsupportedIterator(iterator);
     }
 
     @Override
     public String visitFoldwApply(SynlongParser.FoldwApplyContext ctx) {
-        String op = visit(ctx.prefix_operator());
-        String count = visit(ctx.const_expr());
-        String condition = visit(ctx.simple_expr());
-        String list = visit(ctx.list());
-        if (op != null && count != null && condition != null && list != null) {
-            return "(foldw << " + op + "; " + count + " >> if " + condition + ")(" + list + ")";
-        }
-        return "";
+        throw unsupportedIterator("foldw");
     }
 
     @Override
     public String visitFoldwiApply(SynlongParser.FoldwiApplyContext ctx) {
-        String op = visit(ctx.prefix_operator());
-        String count = visit(ctx.const_expr());
-        String condition = visit(ctx.simple_expr());
-        String list = visit(ctx.list());
-        if (op != null && count != null && condition != null && list != null) {
-            return "(foldwi << " + op + "; " + count + " >> if " + condition + ")(" + list + ")";
+        throw unsupportedIterator("foldwi");
+    }
+
+    private List<String> visitIteratorArgs(SynlongParser.Iterator_arg_listContext ctx) {
+        List<String> args = new ArrayList<>();
+        if (ctx == null) {
+            return args;
         }
-        return "";
+        for (SynlongParser.ExprContext expr : ctx.expr()) {
+            String arg = visit(expr);
+            if (arg != null && !arg.trim().isEmpty()) {
+                args.add(arg);
+            }
+        }
+        return args;
+    }
+
+    private int parseIteratorCount(SynlongParser.Const_exprContext ctx) {
+        String count = visit(ctx);
+        if (count == null || !count.matches("[1-9][0-9]*")) {
+            throw new SynlongToLustreException("Iterator count must be a positive integer literal: " + ctx.getText());
+        }
+        return Integer.parseInt(count);
+    }
+
+    private String lowerMap(String op, int count, List<String> args) {
+        IteratorOperator operator = normalizeIteratorOperator(op);
+        if (args.size() != operator.arity) {
+            throw new SynlongToLustreException("Iterator map with operator '" + operator.normalized
+                    + "' expects " + operator.arity + " array arguments but got " + args.size());
+        }
+
+        List<String> elements = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            if (operator.arity == 2) {
+                elements.add(indexIteratorArg(args.get(0), i) + " " + operator.normalized + " " + indexIteratorArg(args.get(1), i));
+            } else {
+                throw new SynlongToLustreException("Unsupported iterator operator arity for map: " + operator.arity);
+            }
+        }
+        return "[" + String.join(", ", elements) + "]";
+    }
+
+    private String lowerFold(String op, int count, List<String> args) {
+        IteratorOperator operator = normalizeIteratorOperator(op);
+        if (operator.arity != 2) {
+            throw new SynlongToLustreException("Iterator fold only supports binary builtin operators");
+        }
+        if (args.size() != 2) {
+            throw new SynlongToLustreException("Iterator fold with operator '" + operator.normalized
+                    + "' expects initializer plus one array argument but got " + args.size());
+        }
+
+        String acc = args.get(0);
+        String array = args.get(1);
+        for (int i = 0; i < count; i++) {
+            acc = "(" + acc + " " + operator.normalized + " " + indexIteratorArg(array, i) + ")";
+        }
+        return acc;
+    }
+
+    private IteratorOperator normalizeIteratorOperator(String op) {
+        IteratorOperator operator = ITERATOR_OPERATORS.get(op);
+        if (operator == null) {
+            throw new SynlongToLustreException("Unsupported iterator operator: " + op);
+        }
+        return operator;
+    }
+
+    private String indexIteratorArg(String arg, int index) {
+        List<String> literalElements = parseLiteralArrayElements(arg);
+        if (literalElements != null) {
+            if (index >= literalElements.size()) {
+                throw new SynlongToLustreException("Iterator literal array argument has "
+                        + literalElements.size() + " elements but index " + index + " is required");
+            }
+            return parenthesizeIteratorLiteralElement(literalElements.get(index));
+        }
+        if (arg.matches("[A-Za-z_][A-Za-z_0-9]*")) {
+            return arg + "[" + index + "]";
+        }
+        return "(" + arg + ")[" + index + "]";
+    }
+
+    private List<String> parseLiteralArrayElements(String arg) {
+        String trimmed = arg.trim();
+        if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+            return null;
+        }
+
+        String inner = trimmed.substring(1, trimmed.length() - 1).trim();
+        if (inner.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<String> elements = new ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < inner.length(); i++) {
+            char c = inner.charAt(i);
+            if (c == '[' || c == '(' || c == '{') {
+                depth++;
+            } else if (c == ']' || c == ')' || c == '}') {
+                depth--;
+            } else if (c == ',' && depth == 0) {
+                elements.add(inner.substring(start, i).trim());
+                start = i + 1;
+            }
+        }
+        elements.add(inner.substring(start).trim());
+        return elements;
+    }
+
+    private String parenthesizeIteratorLiteralElement(String element) {
+        if (element.matches("[A-Za-z_][A-Za-z_0-9]*(\\[[0-9]+\\])?")
+                || element.matches("[0-9]+(\\.[0-9]+)?")
+                || "true".equals(element)
+                || "false".equals(element)) {
+            return element;
+        }
+        return "(" + element + ")";
+    }
+
+    private SynlongToLustreException unsupportedIterator(String iterator) {
+        return new SynlongToLustreException("Unsupported iterator: " + iterator);
     }
 
     @Override
@@ -1694,22 +1858,12 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     // ================== 添加缺失的迭代器应用方法 ==================
     @Override
     public String visitMapwApply(SynlongParser.MapwApplyContext ctx) {
-        String op = visit(ctx.prefix_operator());
-        String count = visit(ctx.const_expr());
-        String condition = visit(ctx.simple_expr());
-        String defaultList = visit(ctx.list(0));
-        String inputList = visit(ctx.list(1));
-        return "(mapw << " + op + "; " + count + " >> if " + condition + " default " + defaultList + ")(" + inputList + ")";
+        throw unsupportedIterator("mapw");
     }
 
     @Override
     public String visitMapwiApply(SynlongParser.MapwiApplyContext ctx) {
-        String op = visit(ctx.prefix_operator());
-        String count = visit(ctx.const_expr());
-        String condition = visit(ctx.simple_expr());
-        String defaultList = visit(ctx.list(0));
-        String inputList = visit(ctx.list(1));
-        return "(mapwi << " + op + "; " + count + " >> if " + condition + " default " + defaultList + ")(" + inputList + ")";
+        throw unsupportedIterator("mapwi");
     }
 
     // ================== 添加缺失的前缀操作符方法 ==================
@@ -1821,6 +1975,86 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     @Override
     public String visitXorOp(SynlongParser.XorOpContext ctx) {
         return "$xor$";
+    }
+
+    @Override
+    public String visitIteratorPrefixOperator(SynlongParser.IteratorPrefixOperatorContext ctx) {
+        return visit(ctx.prefix_operator());
+    }
+
+    @Override
+    public String visitPlusOfficialOp(SynlongParser.PlusOfficialOpContext ctx) {
+        return "+";
+    }
+
+    @Override
+    public String visitMinusOfficialOp(SynlongParser.MinusOfficialOpContext ctx) {
+        return "-";
+    }
+
+    @Override
+    public String visitMulOfficialOp(SynlongParser.MulOfficialOpContext ctx) {
+        return "*";
+    }
+
+    @Override
+    public String visitDivOfficialOp(SynlongParser.DivOfficialOpContext ctx) {
+        return "/";
+    }
+
+    @Override
+    public String visitModOfficialOp(SynlongParser.ModOfficialOpContext ctx) {
+        return "mod";
+    }
+
+    @Override
+    public String visitDivIntOfficialOp(SynlongParser.DivIntOfficialOpContext ctx) {
+        return "div";
+    }
+
+    @Override
+    public String visitEqOfficialOp(SynlongParser.EqOfficialOpContext ctx) {
+        return "=";
+    }
+
+    @Override
+    public String visitNeOfficialOp(SynlongParser.NeOfficialOpContext ctx) {
+        return "<>";
+    }
+
+    @Override
+    public String visitLtOfficialOp(SynlongParser.LtOfficialOpContext ctx) {
+        return "<";
+    }
+
+    @Override
+    public String visitGtOfficialOp(SynlongParser.GtOfficialOpContext ctx) {
+        return ">";
+    }
+
+    @Override
+    public String visitLeOfficialOp(SynlongParser.LeOfficialOpContext ctx) {
+        return "<=";
+    }
+
+    @Override
+    public String visitGeOfficialOp(SynlongParser.GeOfficialOpContext ctx) {
+        return ">=";
+    }
+
+    @Override
+    public String visitAndOfficialOp(SynlongParser.AndOfficialOpContext ctx) {
+        return "and";
+    }
+
+    @Override
+    public String visitOrOfficialOp(SynlongParser.OrOfficialOpContext ctx) {
+        return "or";
+    }
+
+    @Override
+    public String visitXorOfficialOp(SynlongParser.XorOfficialOpContext ctx) {
+        return "xor";
     }
 
     // ================== 添加缺失的声明处理方法 ==================

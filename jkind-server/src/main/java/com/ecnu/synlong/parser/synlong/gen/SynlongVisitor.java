@@ -1,4 +1,4 @@
-// Generated from /Users/wei/IdeaProjects/java-lustre-checker/jkind-server/src/main/java/com/ecnu/synlong/parser/synlong/Synlong.g4 by ANTLR 4.13.2
+// Generated from jkind-server/src/main/java/com/ecnu/synlong/parser/synlong/Synlong.g4 by ANTLR 4.13.2
 package com.ecnu.synlong.parser.synlong.gen;
 import org.antlr.v4.runtime.tree.ParseTreeVisitor;
 
@@ -807,6 +807,130 @@ public interface SynlongVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitFoldwiApply(SynlongParser.FoldwiApplyContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link SynlongParser#iterator_header}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitIterator_header(SynlongParser.Iterator_headerContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code IteratorPrefixOperator}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitIteratorPrefixOperator(SynlongParser.IteratorPrefixOperatorContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code PlusOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitPlusOfficialOp(SynlongParser.PlusOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code MinusOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitMinusOfficialOp(SynlongParser.MinusOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code MulOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitMulOfficialOp(SynlongParser.MulOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code DivOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitDivOfficialOp(SynlongParser.DivOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code ModOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitModOfficialOp(SynlongParser.ModOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code DivIntOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitDivIntOfficialOp(SynlongParser.DivIntOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code EqOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitEqOfficialOp(SynlongParser.EqOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code NeOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitNeOfficialOp(SynlongParser.NeOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code LtOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitLtOfficialOp(SynlongParser.LtOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code GtOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitGtOfficialOp(SynlongParser.GtOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code LeOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitLeOfficialOp(SynlongParser.LeOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code GeOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitGeOfficialOp(SynlongParser.GeOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code AndOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitAndOfficialOp(SynlongParser.AndOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code OrOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitOrOfficialOp(SynlongParser.OrOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code XorOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitXorOfficialOp(SynlongParser.XorOfficialOpContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link SynlongParser#iterator_arg_list}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitIterator_arg_list(SynlongParser.Iterator_arg_listContext ctx);
 	/**
 	 * Visit a parse tree produced by the {@code PrefixId}
 	 * labeled alternative in {@link SynlongParser#prefix_operator}.

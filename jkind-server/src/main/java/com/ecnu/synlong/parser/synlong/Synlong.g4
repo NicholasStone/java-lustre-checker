@@ -283,11 +283,38 @@ pattern
 
 apply_expr
     : prefix_operator '(' list ')' # SimpleApply
-    | '(' iterator '<<' prefix_operator ';' const_expr '>>' ')' '(' list ')' # IteratorApply
+    | ('(' iterator_header ')' | iterator_header) '(' iterator_arg_list ')' # IteratorApply
     | '(' 'mapw' '<<' prefix_operator ';' const_expr '>>' 'if' simple_expr 'default' '(' list ')' ')' '(' list ')' # MapwApply
     | '(' 'mapwi' '<<' prefix_operator ';' const_expr '>>' 'if' simple_expr 'default' '(' list ')' ')' '(' list ')' # MapwiApply
     | '(' 'foldw' '<<' prefix_operator ';' const_expr '>>' 'if' simple_expr ')' '(' list ')' # FoldwApply
     | '(' 'foldwi' '<<' prefix_operator ';' const_expr '>>' 'if' simple_expr ')' '(' list ')' # FoldwiApply
+    ;
+
+iterator_header
+    : iterator '<<' iterator_operator ';' const_expr '>>'
+    ;
+
+iterator_operator
+    : prefix_operator # IteratorPrefixOperator
+    | '+' # PlusOfficialOp
+    | '-' # MinusOfficialOp
+    | '*' # MulOfficialOp
+    | '/' # DivOfficialOp
+    | 'mod' # ModOfficialOp
+    | 'div' # DivIntOfficialOp
+    | '=' # EqOfficialOp
+    | '<>' # NeOfficialOp
+    | '<' # LtOfficialOp
+    | '>' # GtOfficialOp
+    | '<=' # LeOfficialOp
+    | '>=' # GeOfficialOp
+    | 'and' # AndOfficialOp
+    | 'or' # OrOfficialOp
+    | 'xor' # XorOfficialOp
+    ;
+
+iterator_arg_list
+    : (expr (',' expr)*)?
     ;
 
 prefix_operator

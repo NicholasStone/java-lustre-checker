@@ -39,6 +39,15 @@ JKind是一个Lustre验证工具，主要用于验证Lustre程序的正确性。
 2. 在这里，把Synlong文件中的状态机等转化为Lustre文件，然后把这个lustre文件传递通过调用[LustreService](jkind-server/src/main/java/com/ecnu/synlong/service/LustreService.java)里的代码进行验证。
 
 ## 运行和测试
+### Synlong 迭代器降级子集
+当前 `jkind-server` 在 Synlong 转 Lustre 阶段支持一个受限的 Lustre V6/Synlong 迭代器子集：
+
+- `map<<+;3>>(A,B)` 和 `(map << $+$; 3 >>)(A,B)` 会降级为逐元素核心 Lustre 数组表达式。
+- `fold<<+;3>>(init,A)` 和 `(fold << $+$; 3 >>)(init,A)` 会降级为左结合核心 Lustre 表达式。
+- 计数 `n` 必须是正整数字面量；操作符目前限内置二元操作符及对应 `$...$` 别名。
+- `mapi`、`foldi`、`mapfold`、`mapw`、`mapwi`、`foldw`、`foldwi` 以及用户自定义迭代器操作符会显式报不支持错误。
+- 这是转换端降级实现，没有向 `jkind-common` 的核心 Lustre AST、类型检查或 SMT 翻译增加原生 V6 迭代器语义。
+
 ### 启动
 ```bash
 # 1、编译
@@ -50,4 +59,3 @@ java -jar jkind-server/target/jkind-server-1.0-SNAPSHOT.jar
 ### 测试
 启动前端代码（仓库：[checker-frontend](https://github.com/iyouwei/check-frontend)），代码框里输入Synlong代码（案例参考：[lustre-demos](lustre-demos)
 ，但目前这里案例没有状态机，需要补充），点击验证按钮即可。
-

@@ -1,4 +1,4 @@
-// Generated from /Users/wei/IdeaProjects/java-lustre-checker/jkind-server/src/main/java/com/ecnu/synlong/parser/synlong/Synlong.g4 by ANTLR 4.13.2
+// Generated from jkind-server/src/main/java/com/ecnu/synlong/parser/synlong/Synlong.g4 by ANTLR 4.13.2
 package com.ecnu.synlong.parser.synlong.gen;
 import org.antlr.v4.runtime.tree.ParseTreeListener;
 
@@ -1365,6 +1365,218 @@ public interface SynlongListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitFoldwiApply(SynlongParser.FoldwiApplyContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link SynlongParser#iterator_header}.
+	 * @param ctx the parse tree
+	 */
+	void enterIterator_header(SynlongParser.Iterator_headerContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SynlongParser#iterator_header}.
+	 * @param ctx the parse tree
+	 */
+	void exitIterator_header(SynlongParser.Iterator_headerContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code IteratorPrefixOperator}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterIteratorPrefixOperator(SynlongParser.IteratorPrefixOperatorContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code IteratorPrefixOperator}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitIteratorPrefixOperator(SynlongParser.IteratorPrefixOperatorContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code PlusOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterPlusOfficialOp(SynlongParser.PlusOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code PlusOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitPlusOfficialOp(SynlongParser.PlusOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code MinusOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterMinusOfficialOp(SynlongParser.MinusOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code MinusOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitMinusOfficialOp(SynlongParser.MinusOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code MulOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterMulOfficialOp(SynlongParser.MulOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code MulOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitMulOfficialOp(SynlongParser.MulOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code DivOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterDivOfficialOp(SynlongParser.DivOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code DivOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitDivOfficialOp(SynlongParser.DivOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code ModOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterModOfficialOp(SynlongParser.ModOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code ModOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitModOfficialOp(SynlongParser.ModOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code DivIntOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterDivIntOfficialOp(SynlongParser.DivIntOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code DivIntOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitDivIntOfficialOp(SynlongParser.DivIntOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code EqOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterEqOfficialOp(SynlongParser.EqOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code EqOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitEqOfficialOp(SynlongParser.EqOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code NeOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterNeOfficialOp(SynlongParser.NeOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code NeOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitNeOfficialOp(SynlongParser.NeOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code LtOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterLtOfficialOp(SynlongParser.LtOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code LtOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitLtOfficialOp(SynlongParser.LtOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code GtOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterGtOfficialOp(SynlongParser.GtOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code GtOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitGtOfficialOp(SynlongParser.GtOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code LeOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterLeOfficialOp(SynlongParser.LeOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code LeOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitLeOfficialOp(SynlongParser.LeOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code GeOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterGeOfficialOp(SynlongParser.GeOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code GeOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitGeOfficialOp(SynlongParser.GeOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code AndOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterAndOfficialOp(SynlongParser.AndOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code AndOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitAndOfficialOp(SynlongParser.AndOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code OrOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterOrOfficialOp(SynlongParser.OrOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code OrOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitOrOfficialOp(SynlongParser.OrOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code XorOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void enterXorOfficialOp(SynlongParser.XorOfficialOpContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code XorOfficialOp}
+	 * labeled alternative in {@link SynlongParser#iterator_operator}.
+	 * @param ctx the parse tree
+	 */
+	void exitXorOfficialOp(SynlongParser.XorOfficialOpContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link SynlongParser#iterator_arg_list}.
+	 * @param ctx the parse tree
+	 */
+	void enterIterator_arg_list(SynlongParser.Iterator_arg_listContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SynlongParser#iterator_arg_list}.
+	 * @param ctx the parse tree
+	 */
+	void exitIterator_arg_list(SynlongParser.Iterator_arg_listContext ctx);
 	/**
 	 * Enter a parse tree produced by the {@code PrefixId}
 	 * labeled alternative in {@link SynlongParser#prefix_operator}.
