@@ -34,7 +34,9 @@ Expected high-order checks:
 2. Fixed-count `map` lowers to an array expression with indexed arguments.
 3. Successful outputs contain no high-order residue tokens.
 4. Successful outputs parse with `LustreService.parseLustre`.
-5. Unsupported advanced iterators fail before JKind parsing.
+5. Unsupported advanced iterators fail before JKind parsing. The targeted
+   unsupported-case tests log the expected `SynlongToLustreException` stack traces
+   while still passing.
 6. `reference/result.txt` is preserved by tests that call `SynlongConverter`.
 
 ## Follow-up scope
