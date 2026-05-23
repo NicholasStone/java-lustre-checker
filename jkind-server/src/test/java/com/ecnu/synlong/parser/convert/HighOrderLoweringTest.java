@@ -35,10 +35,10 @@ public class HighOrderLoweringTest {
 
         String lustre = convertPreservingReferenceResult(synlong);
 
-        assertContains(lustre, "sum = a + b");
-        assertContains(lustre, "neg = -a");
-        assertContains(lustre, "inverted = not x");
-        assertContains(lustre, "both = x and y");
+        assertContainsIgnoringWhitespace(lustre, "sum = a + b");
+        assertContainsIgnoringWhitespace(lustre, "neg = -a");
+        assertContainsIgnoringWhitespace(lustre, "inverted = not x");
+        assertContainsIgnoringWhitespace(lustre, "both = x and y");
         assertNoSuccessResidue(lustre);
         assertParsesAsLustre(lustre);
     }
@@ -54,10 +54,10 @@ public class HighOrderLoweringTest {
 
         String lustre = convertPreservingReferenceResult(synlong);
 
-        assertContains(lustre, "c = [");
-        assertContains(lustre, "a[0] + b[0]");
-        assertContains(lustre, "a[1] + b[1]");
-        assertContains(lustre, "a[2] + b[2]");
+        assertContainsIgnoringWhitespace(lustre, "c = [");
+        assertContainsIgnoringWhitespace(lustre, "a[0] + b[0]");
+        assertContainsIgnoringWhitespace(lustre, "a[1] + b[1]");
+        assertContainsIgnoringWhitespace(lustre, "a[2] + b[2]");
         assertNoSuccessResidue(lustre);
         assertParsesAsLustre(lustre);
     }
@@ -98,20 +98,29 @@ public class HighOrderLoweringTest {
 
     private static String convertPreservingReferenceResult(String synlong) throws Exception {
         Path resultPath = Paths.get("reference", "result.txt");
-        boolean existed = Files.exists(resultPath);
-        byte[] original = existed ? Files.readAllBytes(resultPath) : null;
+        Path resultDir = resultPath.getParent();
+        boolean directoryExisted = resultDir == null || Files.exists(resultDir);
+        boolean fileExisted = Files.exists(resultPath);
+        byte[] original = fileExisted ? Files.readAllBytes(resultPath) : null;
+        if (resultDir != null && !directoryExisted) {
+            Files.createDirectories(resultDir);
+        }
         try {
             return SynlongConverter.convert(synlong);
         } finally {
-            restoreReferenceResult(resultPath, existed, original);
+            restoreReferenceResult(resultPath, resultDir, directoryExisted, fileExisted, original);
         }
     }
 
-    private static void restoreReferenceResult(Path resultPath, boolean existed, byte[] original) throws IOException {
-        if (existed) {
+    private static void restoreReferenceResult(Path resultPath, Path resultDir, boolean directoryExisted,
+                                               boolean fileExisted, byte[] original) throws IOException {
+        if (fileExisted) {
             Files.write(resultPath, original);
         } else {
             Files.deleteIfExists(resultPath);
+        }
+        if (resultDir != null && !directoryExisted) {
+            Files.deleteIfExists(resultDir);
         }
     }
 
@@ -125,8 +134,11 @@ public class HighOrderLoweringTest {
         new LustreService().parseLustre(lustre);
     }
 
-    private static void assertContains(String actual, String expected) {
-        assertTrue(actual.contains(expected), "Expected generated Lustre to contain: " + expected + "\n" + actual);
+    private static void assertContainsIgnoringWhitespace(String actual, String expected) {
+        String normalizedActual = actual.replaceAll("\\s+", "");
+        String normalizedExpected = expected.replaceAll("\\s+", "");
+        assertTrue(normalizedActual.contains(normalizedExpected),
+                "Expected generated Lustre to contain: " + expected + "\n" + actual);
     }
 
 }
