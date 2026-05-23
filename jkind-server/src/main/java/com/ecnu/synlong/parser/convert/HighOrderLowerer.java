@@ -6,6 +6,9 @@ import java.util.List;
 /**
  * Lowers Synlong high-order prefix operators and the PR1 supported iterator
  * subset to ordinary Lustre expressions accepted by JKind.
+ *
+ * <p>Boundary: direct prefix operators and fixed-count {@code map} are lowered;
+ * casts, fold/mapi/mapfold, and conditional iterators fail before JKind parsing.</p>
  */
 public class HighOrderLowerer {
     public String lowerApply(String operator, List<String> arguments) {
@@ -40,6 +43,7 @@ public class HighOrderLowerer {
     }
 
     public String lowerIterator(String iterator, String operator, String countText, List<String> arguments) {
+        // PR1 expands map with a literal count into an array constructor; all other iterator shapes remain unsupported by design.
         String normalizedIterator = iterator == null ? "" : iterator.trim();
         if (!"map".equals(normalizedIterator)) {
             throw new SynlongToLustreException("Unsupported high-order iterator '" + normalizedIterator

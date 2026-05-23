@@ -10,8 +10,10 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import java.util.*;
 
 /**
- * Lustre到自动机的动态转换器
- * 基于SynlongToLustreVisitor的转换逻辑，生成自动机模型
+ * 状态机文本到自动机 JSON 的转换器。
+ *
+ * <p>它与 SynlongToLustreVisitor 一样先收集状态机事实，但第二阶段生成
+ * Location/Transition 模型而不是 JKind 可验证的 Lustre 代码。</p>
  */
 public class LustreToAutomatonConverter extends SynlongBaseVisitor<String> {
     private final SynlongToLustreContext context;
@@ -50,10 +52,10 @@ public class LustreToAutomatonConverter extends SynlongBaseVisitor<String> {
     
     @Override
     public String visitProgram(SynlongParser.ProgramContext ctx) {
-        // 第一阶段：收集所有状态机信息（复用原有逻辑）
+        // Phase 1 mirrors the verification converter so locations/transitions see the same state set.
         collectStateMachineInfo(ctx);
         
-        // 第二阶段：生成自动机模型
+        // Phase 2 diverges from verification: build JSON model objects, not Lustre equations.
         generateAutomatonModel(ctx);
         
         return ""; // 不需要返回Lustre代码
@@ -290,7 +292,7 @@ public class LustreToAutomatonConverter extends SynlongBaseVisitor<String> {
     }
     
     /**
-     * 生成自动机模型
+     * 生成自动机模型；没有状态机的 node 会被跳过，不参与系统声明之外的图结构。
      */
     private void generateAutomatonModel(SynlongParser.ProgramContext ctx) {
         for (SynlongParser.DeclsContext decl : ctx.decls()) {
@@ -328,10 +330,10 @@ public class LustreToAutomatonConverter extends SynlongBaseVisitor<String> {
             currentLocations.clear();
             currentTransitions.clear();
             
-            // 生成位置（状态）
+            // Locations are visualization states; they do not encode verification invariants by themselves.
             generateLocations();
             
-            // 生成转换
+            // Transitions preserve parsed unless/until guards for JSON consumers.
             generateTransitions();
             
             // 设置初始状态
@@ -481,7 +483,7 @@ public class LustreToAutomatonConverter extends SynlongBaseVisitor<String> {
     }
     
     /**
-     * 生成位置（状态）
+     * 生成位置（状态）。坐标是布局信息，状态语义仍来自 Synlong 状态名和转换。
      */
     private void generateLocations() {
         List<String> states = new ArrayList<>(context.getAllStates());
@@ -567,7 +569,7 @@ public class LustreToAutomatonConverter extends SynlongBaseVisitor<String> {
     }
     
     /**
-     * 生成转换
+     * 生成转换。这里构造可视化边，不调用 JKind，也不判断 property 是否成立。
      */
     private void generateTransitions() {
         // 为每个状态生成转换
@@ -586,7 +588,7 @@ public class LustreToAutomatonConverter extends SynlongBaseVisitor<String> {
     }
     
     /**
-     * 解析转换字符串
+     * 解析收集阶段保存的转换字符串；格式必须与 collectStateTransitions 保持一致。
      */
     private Transition parseTransition(String sourceStateName, String transitionStr) {
         // 解析转换字符串 "unless/until: condition -> target"

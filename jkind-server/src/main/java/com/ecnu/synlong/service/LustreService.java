@@ -30,7 +30,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * 抄的jkind代码中的jkind/src/jkind/JKind.java
+ * JKind 验证桥接层。
+ *
+ * <p>到这里 Synlong 转换已经结束，输入必须是 JKind Lustre.g4 可解析的文本；
+ * 本服务只负责 parser、静态分析、翻译和 Director 执行。</p>
  */
 @Service
 public class LustreService {
@@ -40,9 +43,11 @@ public class LustreService {
     public CheckResult check(String[] args) {
         try {
             JKindSettings settings = JKindArgumentParser.parse(args);
+            // 严格语法边界：Synlong-only 语法若没有在转换器中降阶，会在 parseLustre 失败。
             Program program = parseLustre(settings.filename);
             program = setMainNode(program, settings.main);
 
+            // 下面保持 JKind 主流程顺序：静态检查、求解器探测、翻译、Director 运行。
             StaticAnalyzer staticAnalyzer = new StaticAnalyzer();
             staticAnalyzer.check(program, settings.solver, settings);
             if (!LinearChecker.isLinear(program)) {
@@ -98,6 +103,7 @@ public class LustreService {
     }
 
     public Program parseLustre(String input) throws Exception {
+        // 这里使用 jkind-common 的 Lustre parser，而不是 Synlong parser。
         CharStream stream = new ANTLRInputStream(input);
         LustreLexer lexer = new LustreLexer(stream);
         CommonTokenStream tokens = new CommonTokenStream(lexer);

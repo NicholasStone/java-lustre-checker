@@ -167,6 +167,8 @@ returns_var
 //=========================
 // State Machines
 //=========================
+// This source grammar is the editable boundary. Regenerate files under
+// parser/synlong/gen from here instead of hand-editing generated parser Java.
 state_machine
     : AUTOMATON ID? state_decl+
     ;
@@ -178,7 +180,8 @@ state_decl
       (UNTIL transition+)?
     ;
 
-// ★ 核心改动：state_body 不再可空，避免预测混乱
+// State bodies stay non-empty so the visitor can reliably distinguish
+// local declarations, let blocks, and single equations during collection.
 state_body
     : local_block let_block # StateBodyWithLocal
     | local_block # StateBodyLocalOnly
@@ -281,6 +284,8 @@ pattern
     | '_' # PatternWildcard
     ;
 
+// High-order syntax is accepted here, but JKind never sees these forms directly:
+// SynlongToLustreVisitor/HighOrderLowerer must lower or reject them first.
 apply_expr
     : prefix_operator '(' list ')' # SimpleApply
     | '(' iterator '<<' prefix_operator ';' const_expr '>>' ')' '(' list ')' # IteratorApply
@@ -290,6 +295,8 @@ apply_expr
     | '(' 'foldwi' '<<' prefix_operator ';' const_expr '>>' 'if' simple_expr ')' '(' list ')' # FoldwiApply
     ;
 
+// Prefix operators include Synlong dollar operators plus helper-node shorthands
+// such as (make T)/(flatten T), both of which are converted before JKind parse.
 prefix_operator
     : ID # PrefixId
     | prefix_unary_operator # PrefixUnaryOp
@@ -326,6 +333,8 @@ prefix_binary_operator
     | '$xor$' # XorOp
     ;
 
+// The grammar lists several iterator names for compatibility; current lowering
+// support is intentionally narrower and enforced in HighOrderLowerer.
 iterator
     : 'map' # Map
     | 'fold' # Fold

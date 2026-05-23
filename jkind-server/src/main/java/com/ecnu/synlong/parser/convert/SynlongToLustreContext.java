@@ -2,29 +2,33 @@ package com.ecnu.synlong.parser.convert;
 
 import java.util.*;
 
+/**
+ * Shared generation state for SynlongToLustreVisitor.
+ *
+ * <p>Linked collections preserve source encounter order so emitted Lustre stays
+ * deterministic across runs; visitor and context must agree on state-local naming.</p>
+ */
 public class SynlongToLustreContext {
-    // 状态名映射
+    // State/variable maps are the contract between collection and emission phases.
     private final Map<String, String> stateNameMap = new LinkedHashMap<>();
-    // 已声明变量集合
     private final Set<String> declaredVars = new LinkedHashSet<>();
-    // 全局变量集合（输入、输出、节点级局部变量）
     private final Set<String> globalVars = new LinkedHashSet<>();
     // 初始状态
     private String initialState = null;
     // 最终状态集合
     private final Set<String> finalStates = new LinkedHashSet<>();
     
-    // 新增：状态机相关收集
+    // 状态机事实统一收集后再生成，避免状态枚举和条件赋值依赖局部遍历顺序。
     private final Set<String> allStates = new LinkedHashSet<>();
     private final Map<String, Set<String>> stateLocalVars = new LinkedHashMap<>();
     private final Map<String, String> stateBodies = new LinkedHashMap<>();
     private final Map<String, List<String>> stateTransitions = new LinkedHashMap<>();
     
-    // 新增：状态局部变量类型和赋值收集
+    // 状态局部变量的类型与赋值必须一起保存，后续才能决定是否加状态名前缀。
     private final Map<String, Map<String, String>> stateVarTypes = new LinkedHashMap<>(); // stateName -> (varName -> type)
     private final Map<String, List<String>> stateAssignments = new LinkedHashMap<>(); // stateName -> list of assignments
     
-    // 新增：全局类型定义收集
+    // 全局定义按最终 Lustre 输出顺序累积，helperNodeDefs 负责避免重复/冲突的辅助节点。
     private final List<String> globalTypeDefs = new ArrayList<>();
     private final List<String> globalConstDefs = new ArrayList<>();
     private final List<String> globalNodeDefs = new ArrayList<>();
@@ -137,12 +141,12 @@ public class SynlongToLustreContext {
                stateVarTypes.get(stateName).containsKey(varName);
     }
     
-    // 检查变量是否需要前缀（只有非全局的状态变量才需要前缀）
+    // Prefix only state-local variables that are not node-level globals; this keeps state scopes separate without renaming inputs/outputs.
     public boolean needsPrefix(String stateName, String varName) {
         return isStateLocalVar(stateName, varName) && !isGlobalVariable(varName);
     }
     
-    // 获取变量在特定状态下的正确名称（如果是状态变量且非全局变量则加前缀）
+    // Visitor-side references and generated assignments must use the same naming rule.
     public String getCorrectVarName(String stateName, String varName) {
         if (needsPrefix(stateName, varName)) {
             return getPrefixedVarName(stateName, varName);
@@ -191,6 +195,7 @@ public class SynlongToLustreContext {
     }
 
     public void registerHelperNodeDef(String helperName, String nodeDef) {
+        // Helper nodes such as make_T/flatten_T are global Lustre declarations; conflicting definitions would corrupt later output.
         String existingNodeDef = helperNodeDefs.get(helperName);
         if (existingNodeDef != null) {
             if (!existingNodeDef.equals(nodeDef)) {
@@ -312,7 +317,7 @@ public class SynlongToLustreContext {
         return !allStates.isEmpty() || !getAllStateVarTypes().isEmpty();
     }
     
-    // 生成状态机条件赋值（处理重复变量合并）
+    // Generate state-guarded assignments: update in the owning state and retain pre(var) elsewhere.
     public String generateStateMachineConditionalAssignments() {
         StringBuilder sb = new StringBuilder();
         Map<String, List<StateAssignment>> varAssignments = groupAssignmentsByVariable();
@@ -411,7 +416,7 @@ public class SynlongToLustreContext {
         }
     }
     
-    // 处理右侧表达式中的变量引用，为状态变量添加前缀
+    // RHS rewriting mirrors LHS prefixing so state-local references stay within the generated state scope.
     private String processRhsVariableReferences(String currentStateName, String rhs) {
         // 这是一个简化版本，实际可能需要更复杂的解析
         // 目前只处理简单的变量引用

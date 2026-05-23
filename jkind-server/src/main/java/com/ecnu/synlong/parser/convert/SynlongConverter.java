@@ -15,16 +15,22 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * Synlong->Lustre 的文本转换入口：ANTLR 使用 Synlong.g4 生成的 parser，
+ * visitor/context 再把语法树降成 JKind Lustre parser 可接受的字符串。
+ */
 public class SynlongConverter {
 	
 	private static final Logger log = LoggerFactory.getLogger(SynlongConverter.class);
     /**
-     * 将Synlong代码转换为Lustre代码
+     * 将 Synlong/Scade-like 文本转换为 Lustre 文本；这里不运行 JKind 验证。
+     *
      * @param synlongCode Synlong代码字符串
      * @return Lustre代码字符串
      */
     public static String convert(String synlongCode) {
         try {
+            // 解析阶段只处理 Synlong.g4 的源语法；生成的 parser Java 不应手工修改。
             CharStream input = CharStreams.fromString(synlongCode);
             SynlongLexer lexer = new SynlongLexer(input);
             // 使用自定义错误监听器
@@ -43,7 +49,7 @@ public class SynlongConverter {
             String result = visitor.visit(tree);
 //            log.info("Synlong转换Lustre结果：\n{}", result);
 
-            // 输出result到result.txt文件
+            // 调试/历史副作用：每次转换会覆盖 reference/result.txt，测试前后需用 diff 保护该文件。
             try {
                 Path out = Paths.get("reference/result.txt");
                 Files.write(out, result.getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);

@@ -7,6 +7,12 @@ import org.antlr.v4.runtime.tree.ParseTree;
 import java.math.BigDecimal;
 import java.util.*;
 
+/**
+ * Converts the Synlong parse tree into plain Lustre text.
+ *
+ * <p>The visitor is intentionally two-phase: collect state-machine facts and
+ * helper requirements first, then emit deterministic Lustre that JKind can parse.</p>
+ */
 public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     private final SynlongToLustreContext context;
     private final HighOrderLowerer highOrderLowerer;
@@ -18,15 +24,16 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
 
     @Override
     public String visitProgram(SynlongParser.ProgramContext ctx) {
-        // 第一阶段：收集所有状态机信息
+        // Phase 1 must see every state/local/helper before emission; generation
+        // depends on complete context to avoid order-sensitive Lustre output.
         collectStateMachineInfo(ctx);
         
-        // 第二阶段：生成完整的Lustre代码
+        // Phase 2 emits only JKind-facing Lustre, not Synlong high-order syntax.
         return generateLustreCode(ctx);
     }
     
     /**
-     * 第一阶段：收集状态机信息
+     * 收集阶段只写入上下文，不输出 Lustre；状态枚举、变量前缀和转换条件都依赖这里的全局视图。
      */
     private void collectStateMachineInfo(SynlongParser.ProgramContext ctx) {
         for (SynlongParser.DeclsContext decl : ctx.decls()) {
@@ -116,7 +123,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     }
     
     /**
-     * 收集状态机信息
+     * 收集单个状态机的状态、状态局部变量和迁移；这些事实稍后会统一生成枚举和条件赋值。
      */
     private void collectStateMachineInfo(SynlongParser.State_machineContext ctx) {
         for (SynlongParser.State_declContext stateDecl : ctx.state_decl()) {
@@ -272,7 +279,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     }
 
     /**
-     * 第二阶段：生成完整的Lustre代码
+     * 生成完整 Lustre 文本。这里是 JKind grammar 边界，仍保留的 Synlong-only 语法都会在服务层解析失败。
      */
     private String generateLustreCode(SynlongParser.ProgramContext ctx) {
         StringBuilder sb = new StringBuilder();
@@ -776,7 +783,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     // ================== 状态机转换 ==================
     @Override
     public String visitState_machine(SynlongParser.State_machineContext ctx) {
-        // 使用收集到的状态信息生成状态机代码
+        // 使用收集好的状态全集生成单一 state 方程，避免边访问边输出导致迁移缺失。
         StringBuilder sb = new StringBuilder();
         
         // 1. 生成状态转移方程
@@ -812,7 +819,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
             sb.append("\telse pre(state);\n");
         }
         
-        // 2. 生成状态局部变量的条件赋值（保持语义）
+        // 状态局部赋值由 context 合并，保持“仅在对应状态更新，否则 pre 保持”的语义。
         String conditionalAssignments = context.generateStateMachineConditionalAssignments();
         if (!conditionalAssignments.isEmpty()) {
             sb.append("\n").append(conditionalAssignments);
@@ -994,7 +1001,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         return "";
     }
 
-    // 处理函数调用
+    // Synlong prefix apply 在这里降成普通 Lustre 表达式；JKind 不认识 $+$、not$ 等前缀语法。
     @Override
     public String visitSimpleApply(SynlongParser.SimpleApplyContext ctx) {
         String prefixOp = visit(ctx.prefix_operator());
@@ -1357,6 +1364,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
 
     @Override
     public String visitIteratorApply(SynlongParser.IteratorApplyContext ctx) {
+        // 迭代器只在 HighOrderLowerer 支持范围内降阶；不支持的形式必须在进入 JKind 前失败。
         String iterator = visit(ctx.iterator());
         String op = visit(ctx.prefix_operator());
         String count = visit(ctx.const_expr());
@@ -1365,6 +1373,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
 
     @Override
     public String visitFoldwApply(SynlongParser.FoldwApplyContext ctx) {
+        // 条件迭代器当前没有等价的 PR1 降阶实现，明确拒绝比透传给 JKind 更安全。
         throw highOrderLowerer.unsupportedIterator("foldw", "conditional iterators are not supported by PR1 lowering");
     }
 
@@ -1666,6 +1675,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     // ================== 添加缺失的迭代器应用方法 ==================
     @Override
     public String visitMapwApply(SynlongParser.MapwApplyContext ctx) {
+        // 条件 map 语法可解析但不生成 Lustre，防止可视语法被误认为验证支持。
         throw highOrderLowerer.unsupportedIterator("mapw", "conditional iterators are not supported by PR1 lowering");
     }
 
