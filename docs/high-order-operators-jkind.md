@@ -9,7 +9,8 @@ sent to JKind's Lustre parser.
 ### Prefix operator applications
 
 `HighOrderLowerer.lowerApply` rewrites supported prefix operators into ordinary
-Lustre expressions. The converter emits ordinary Lustre operator syntax without Synlong prefix residue:
+Lustre expressions. The converter emits ordinary Lustre operator syntax without
+Synlong prefix residue:
 
 ```synlong
 sum = $+$(a, b);

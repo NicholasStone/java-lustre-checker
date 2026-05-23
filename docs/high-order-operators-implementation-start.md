@@ -29,7 +29,8 @@ mise exec java@17 maven@3.9.9 -- mvn -pl jkind-server -am test
 
 Expected high-order checks:
 
-1. Prefix applications lower to ordinary Lustre expressions without Synlong prefix residue.
+1. Prefix applications lower to ordinary Lustre expressions without Synlong
+   prefix residue.
 2. Fixed-count `map` lowers to an array expression with indexed arguments.
 3. Successful outputs contain no high-order residue tokens.
 4. Successful outputs parse with `LustreService.parseLustre`.
