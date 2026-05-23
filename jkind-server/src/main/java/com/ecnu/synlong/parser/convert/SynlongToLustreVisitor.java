@@ -9,9 +9,11 @@ import java.util.*;
 
 public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     private final SynlongToLustreContext context;
+    private final HighOrderLowerer highOrderLowerer;
 
     public SynlongToLustreVisitor(SynlongToLustreContext context) {
         this.context = context;
+        this.highOrderLowerer = new HighOrderLowerer();
     }
 
     @Override
@@ -995,35 +997,8 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     // 处理函数调用
     @Override
     public String visitSimpleApply(SynlongParser.SimpleApplyContext ctx) {
-        StringBuilder sb = new StringBuilder();
-        // SimpleApplyContext没有直接的ID方法，需要从prefix_operator获取
-        if (ctx.prefix_operator() != null) {
-            String prefixOp = visit(ctx.prefix_operator());
-            if (prefixOp == null) {
-                prefixOp = "";
-            }
-            // 处理 (make type) 语法
-            if (prefixOp.contains("make")) {
-                // 提取类型名
-                String typeName = prefixOp.replaceAll(".*make\\s+(\\w+).*", "$1");
-                sb.append(typeName);
-            } else if (prefixOp.contains("flatten")) {
-                // 处理 (flatten type) 语法
-                String typeName = prefixOp.replaceAll(".*flatten\\s+(\\w+).*", "$1");
-                sb.append(typeName);
-            } else {
-                sb.append(prefixOp);
-            }
-        }
-        sb.append("(");
-        if (ctx.list() != null) {
-            String args = visit(ctx.list());
-            if (args != null && !args.trim().isEmpty()) {
-                sb.append(args);
-            }
-        }
-        sb.append(")");
-        return sb.toString();
+        String prefixOp = visit(ctx.prefix_operator());
+        return highOrderLowerer.lowerApply(prefixOp, visitListItems(ctx.list()));
     }
 
     @Override
@@ -1122,6 +1097,21 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         }
         
         return String.join(", ", args);
+    }
+
+    private List<String> visitListItems(SynlongParser.ListContext ctx) {
+        List<String> args = new ArrayList<>();
+        if (ctx == null) {
+            return args;
+        }
+
+        for (SynlongParser.Simple_exprContext expr : ctx.simple_expr()) {
+            String arg = visit(expr);
+            if (arg != null && !arg.trim().isEmpty()) {
+                args.add(arg);
+            }
+        }
+        return args;
     }
 
     // 添加缺失的访问方法
@@ -1370,35 +1360,17 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         String iterator = visit(ctx.iterator());
         String op = visit(ctx.prefix_operator());
         String count = visit(ctx.const_expr());
-        String list = visit(ctx.list());
-        if (iterator != null && op != null && count != null && list != null) {
-            return "(" + iterator + " << " + op + "; " + count + " >>)(" + list + ")";
-        }
-        return "";
+        return highOrderLowerer.lowerIterator(iterator, op, count, visitListItems(ctx.list()));
     }
 
     @Override
     public String visitFoldwApply(SynlongParser.FoldwApplyContext ctx) {
-        String op = visit(ctx.prefix_operator());
-        String count = visit(ctx.const_expr());
-        String condition = visit(ctx.simple_expr());
-        String list = visit(ctx.list());
-        if (op != null && count != null && condition != null && list != null) {
-            return "(foldw << " + op + "; " + count + " >> if " + condition + ")(" + list + ")";
-        }
-        return "";
+        throw highOrderLowerer.unsupportedIterator("foldw", "conditional iterators are not supported by PR1 lowering");
     }
 
     @Override
     public String visitFoldwiApply(SynlongParser.FoldwiApplyContext ctx) {
-        String op = visit(ctx.prefix_operator());
-        String count = visit(ctx.const_expr());
-        String condition = visit(ctx.simple_expr());
-        String list = visit(ctx.list());
-        if (op != null && count != null && condition != null && list != null) {
-            return "(foldwi << " + op + "; " + count + " >> if " + condition + ")(" + list + ")";
-        }
-        return "";
+        throw highOrderLowerer.unsupportedIterator("foldwi", "conditional iterators are not supported by PR1 lowering");
     }
 
     @Override
@@ -1694,22 +1666,12 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     // ================== 添加缺失的迭代器应用方法 ==================
     @Override
     public String visitMapwApply(SynlongParser.MapwApplyContext ctx) {
-        String op = visit(ctx.prefix_operator());
-        String count = visit(ctx.const_expr());
-        String condition = visit(ctx.simple_expr());
-        String defaultList = visit(ctx.list(0));
-        String inputList = visit(ctx.list(1));
-        return "(mapw << " + op + "; " + count + " >> if " + condition + " default " + defaultList + ")(" + inputList + ")";
+        throw highOrderLowerer.unsupportedIterator("mapw", "conditional iterators are not supported by PR1 lowering");
     }
 
     @Override
     public String visitMapwiApply(SynlongParser.MapwiApplyContext ctx) {
-        String op = visit(ctx.prefix_operator());
-        String count = visit(ctx.const_expr());
-        String condition = visit(ctx.simple_expr());
-        String defaultList = visit(ctx.list(0));
-        String inputList = visit(ctx.list(1));
-        return "(mapwi << " + op + "; " + count + " >> if " + condition + " default " + defaultList + ")(" + inputList + ")";
+        throw highOrderLowerer.unsupportedIterator("mapwi", "conditional iterators are not supported by PR1 lowering");
     }
 
     // ================== 添加缺失的前缀操作符方法 ==================
