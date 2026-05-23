@@ -4,35 +4,37 @@ import java.util.*;
 
 public class SynlongToLustreContext {
     // 状态名映射
-    private final Map<String, String> stateNameMap = new HashMap<>();
+    private final Map<String, String> stateNameMap = new LinkedHashMap<>();
     // 已声明变量集合
-    private final Set<String> declaredVars = new HashSet<>();
+    private final Set<String> declaredVars = new LinkedHashSet<>();
     // 全局变量集合（输入、输出、节点级局部变量）
-    private final Set<String> globalVars = new HashSet<>();
+    private final Set<String> globalVars = new LinkedHashSet<>();
     // 初始状态
     private String initialState = null;
     // 最终状态集合
-    private final Set<String> finalStates = new HashSet<>();
+    private final Set<String> finalStates = new LinkedHashSet<>();
     
     // 新增：状态机相关收集
-    private final Set<String> allStates = new HashSet<>();
-    private final Map<String, Set<String>> stateLocalVars = new HashMap<>();
-    private final Map<String, String> stateBodies = new HashMap<>();
-    private final Map<String, List<String>> stateTransitions = new HashMap<>();
+    private final Set<String> allStates = new LinkedHashSet<>();
+    private final Map<String, Set<String>> stateLocalVars = new LinkedHashMap<>();
+    private final Map<String, String> stateBodies = new LinkedHashMap<>();
+    private final Map<String, List<String>> stateTransitions = new LinkedHashMap<>();
     
     // 新增：状态局部变量类型和赋值收集
-    private final Map<String, Map<String, String>> stateVarTypes = new HashMap<>(); // stateName -> (varName -> type)
-    private final Map<String, List<String>> stateAssignments = new HashMap<>(); // stateName -> list of assignments
+    private final Map<String, Map<String, String>> stateVarTypes = new LinkedHashMap<>(); // stateName -> (varName -> type)
+    private final Map<String, List<String>> stateAssignments = new LinkedHashMap<>(); // stateName -> list of assignments
     
     // 新增：全局类型定义收集
     private final List<String> globalTypeDefs = new ArrayList<>();
     private final List<String> globalConstDefs = new ArrayList<>();
     private final List<String> globalNodeDefs = new ArrayList<>();
+    private final Map<String, String> helperNodeDefs = new LinkedHashMap<>();
+    private int tempNameCounter = 0;
     
     // 新增：结构体构造函数收集
-    private final Set<String> structTypes = new HashSet<>(); // 需要生成构造函数的结构体类型
-    private final Set<String> flattenTypes = new HashSet<>(); // 需要生成flatten函数的结构体类型
-    private final Map<String, Map<String, String>> structFields = new HashMap<>(); // 结构体名 -> (字段名 -> 字段类型)
+    private final Set<String> structTypes = new LinkedHashSet<>(); // 需要生成构造函数的结构体类型
+    private final Set<String> flattenTypes = new LinkedHashSet<>(); // 需要生成flatten函数的结构体类型
+    private final Map<String, Map<String, String>> structFields = new LinkedHashMap<>(); // 结构体名 -> (字段名 -> 字段类型)
 
     public void addState(String synlongState, String lustreState) {
         stateNameMap.put(synlongState, lustreState);
@@ -92,7 +94,7 @@ public class SynlongToLustreContext {
     }
     
     public void addStateLocalVar(String stateName, String varName) {
-        stateLocalVars.computeIfAbsent(stateName, k -> new HashSet<>()).add(varName);
+        stateLocalVars.computeIfAbsent(stateName, k -> new LinkedHashSet<>()).add(varName);
     }
     
     public Set<String> getStateLocalVars(String stateName) {
@@ -117,7 +119,7 @@ public class SynlongToLustreContext {
     
     // 新增：状态局部变量类型和赋值方法
     public void addStateVarType(String stateName, String varName, String type) {
-        stateVarTypes.computeIfAbsent(stateName, k -> new HashMap<>()).put(varName, type);
+        stateVarTypes.computeIfAbsent(stateName, k -> new LinkedHashMap<>()).put(varName, type);
     }
     
     public String getStateVarType(String stateName, String varName) {
@@ -158,7 +160,7 @@ public class SynlongToLustreContext {
     
     // 获取所有状态局部变量的类型信息（带前缀）
     public Map<String, String> getAllStateVarTypes() {
-        Map<String, String> allVarTypes = new HashMap<>();
+        Map<String, String> allVarTypes = new LinkedHashMap<>();
         for (Map.Entry<String, Map<String, String>> stateEntry : stateVarTypes.entrySet()) {
             String stateName = stateEntry.getKey();
             Map<String, String> stateVars = stateEntry.getValue();
@@ -186,6 +188,28 @@ public class SynlongToLustreContext {
     
     public void addGlobalNodeDef(String nodeDef) {
         globalNodeDefs.add(nodeDef);
+    }
+
+    public void registerHelperNodeDef(String helperName, String nodeDef) {
+        String existingNodeDef = helperNodeDefs.get(helperName);
+        if (existingNodeDef != null) {
+            if (!existingNodeDef.equals(nodeDef)) {
+                throw new SynlongToLustreException("Conflicting helper node definition for " + helperName);
+            }
+            return;
+        }
+
+        helperNodeDefs.put(helperName, nodeDef);
+        addGlobalNodeDef(nodeDef);
+    }
+
+    public boolean hasHelperNodeDef(String helperName) {
+        return helperNodeDefs.containsKey(helperName);
+    }
+
+    public String allocateTempName(String purpose) {
+        String prefix = sanitizeIdentifierPart(purpose);
+        return "__" + prefix + "_" + tempNameCounter++;
     }
     
     public List<String> getGlobalTypeDefs() {
@@ -228,9 +252,9 @@ public class SynlongToLustreContext {
     
     // 获取唯一的状态变量（处理重复定义）
     private Map<String, String> getUniqueStateVars() {
-        Map<String, String> uniqueVars = new HashMap<>();
-        Map<String, List<String>> varNameToStates = new HashMap<>(); // 变量名 -> 定义它的状态列表
-        Map<String, Set<String>> varNameToTypes = new HashMap<>(); // 变量名 -> 类型集合
+        Map<String, String> uniqueVars = new LinkedHashMap<>();
+        Map<String, List<String>> varNameToStates = new LinkedHashMap<>(); // 变量名 -> 定义它的状态列表
+        Map<String, Set<String>> varNameToTypes = new LinkedHashMap<>(); // 变量名 -> 类型集合
         
         // 收集所有变量名及其对应的状态和类型
         for (Map.Entry<String, Map<String, String>> stateEntry : stateVarTypes.entrySet()) {
@@ -242,7 +266,7 @@ public class SynlongToLustreContext {
                 String varType = varEntry.getValue();
                 
                 varNameToStates.computeIfAbsent(originalVarName, k -> new ArrayList<>()).add(stateName);
-                varNameToTypes.computeIfAbsent(originalVarName, k -> new HashSet<>()).add(varType);
+                varNameToTypes.computeIfAbsent(originalVarName, k -> new LinkedHashSet<>()).add(varType);
             }
         }
         
@@ -326,7 +350,7 @@ public class SynlongToLustreContext {
     
     // 按变量分组赋值语句
     private Map<String, List<StateAssignment>> groupAssignmentsByVariable() {
-        Map<String, List<StateAssignment>> grouped = new HashMap<>();
+        Map<String, List<StateAssignment>> grouped = new LinkedHashMap<>();
         
         for (String stateName : allStates) {
             List<String> assignments = getStateAssignments(stateName);
@@ -363,7 +387,7 @@ public class SynlongToLustreContext {
         }
         
         int stateCount = 0;
-        Set<String> types = new HashSet<>();
+        Set<String> types = new LinkedHashSet<>();
         
         for (Map.Entry<String, Map<String, String>> stateEntry : stateVarTypes.entrySet()) {
             Map<String, String> stateVars = stateEntry.getValue();
@@ -430,7 +454,7 @@ public class SynlongToLustreContext {
     
     // 添加结构体字段信息
     public void addStructField(String structName, String fieldName, String fieldType) {
-        structFields.computeIfAbsent(structName, k -> new HashMap<>()).put(fieldName, fieldType);
+        structFields.computeIfAbsent(structName, k -> new LinkedHashMap<>()).put(fieldName, fieldType);
     }
     
     // 获取结构体字段信息
@@ -519,5 +543,21 @@ public class SynlongToLustreContext {
         }
         
         return sb.toString();
+    }
+
+    private String sanitizeIdentifierPart(String raw) {
+        String value = raw == null ? "" : raw.trim();
+        if (value.isEmpty()) {
+            return "tmp";
+        }
+
+        String sanitized = value.replaceAll("[^A-Za-z0-9_]", "_");
+        if (sanitized.isEmpty()) {
+            return "tmp";
+        }
+        if (Character.isDigit(sanitized.charAt(0))) {
+            sanitized = "_" + sanitized;
+        }
+        return sanitized;
     }
 }
