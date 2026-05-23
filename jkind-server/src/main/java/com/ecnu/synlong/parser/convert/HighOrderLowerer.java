@@ -18,17 +18,17 @@ public class HighOrderLowerer {
         }
         if ("-$".equals(op)) {
             requireArity(op, args, 1);
-            return "(-" + maybeParenthesize(args.get(0)) + ")";
+            return "-" + maybeParenthesize(args.get(0));
         }
         if ("not$".equals(op)) {
             requireArity(op, args, 1);
-            return "(not " + maybeParenthesize(args.get(0)) + ")";
+            return "not " + maybeParenthesize(args.get(0));
         }
 
         String binaryOperator = toBinaryOperator(op);
         if (binaryOperator != null) {
             requireArity(op, args, 2);
-            return "(" + maybeParenthesize(args.get(0)) + " " + binaryOperator + " " + maybeParenthesize(args.get(1)) + ")";
+            return maybeParenthesize(args.get(0)) + " " + binaryOperator + " " + maybeParenthesize(args.get(1));
         }
 
         if (isUnsupportedCast(op)) {
