@@ -67,10 +67,82 @@ public class SynlongIteratorLoweringTest {
     }
 
     @Test
+    public void officialMapiPlusLowersToIndexAwareCoreArray() {
+        String converted = convert(nodeWithArrayInputs("m", "int^3", "mapi<<+;3>>(A)"));
+
+        assertNoIteratorSyntaxRemains(converted);
+        assertCoreLustre(converted);
+        assertContainsIgnoringWhitespace(converted,
+                "m = [0 + A[0], 1 + A[1], 2 + A[2]]");
+    }
+
+    @Test
+    public void dollarAliasMapiPlusLowersToIndexAwareCoreArray() {
+        String converted = convert(nodeWithArrayInputs("m", "int^3", "(mapi << $+$; 3 >>)(A)"));
+
+        assertNoIteratorSyntaxRemains(converted);
+        assertFalse(converted.contains("$+$"), converted);
+        assertCoreLustre(converted);
+        assertContainsIgnoringWhitespace(converted,
+                "m = [0 + A[0], 1 + A[1], 2 + A[2]]");
+    }
+
+    @Test
+    public void literalArrayMapiLowersWithoutInvalidArrayIndexing() {
+        String converted = convert(minimalArrayNode("m", "mapi<<+;3>>([10,20,30])"));
+
+        assertNoIteratorSyntaxRemains(converted);
+        assertCoreLustre(converted);
+        assertContainsIgnoringWhitespace(converted,
+                "m = [0 + 10, 1 + 20, 2 + 30]");
+    }
+
+    @Test
+    public void officialFoldiPlusLowersToLeftFoldOverIndexTerms() {
+        String converted = convert(nodeWithArrayInputs("s", "int", "foldi<<+;3>>(0, A)"));
+
+        assertNoIteratorSyntaxRemains(converted);
+        assertCoreLustre(converted);
+        assertContainsIgnoringWhitespace(converted,
+                "s = (((0 + (0 + A[0])) + (1 + A[1])) + (2 + A[2]))");
+    }
+
+    @Test
+    public void dollarAliasFoldiPlusLowersToLeftFoldOverIndexTerms() {
+        String converted = convert(nodeWithArrayInputs("s", "int", "(foldi << $+$; 3 >>)(0, A)"));
+
+        assertNoIteratorSyntaxRemains(converted);
+        assertFalse(converted.contains("$+$"), converted);
+        assertCoreLustre(converted);
+        assertContainsIgnoringWhitespace(converted,
+                "s = (((0 + (0 + A[0])) + (1 + A[1])) + (2 + A[2]))");
+    }
+
+    @Test
+    public void officialMapfoldPlusLowersToTupleArrayAndFoldAccumulator() {
+        String converted = convert(mapfoldNode("mapfold<<+;3>>(0, A, B)"));
+
+        assertNoIteratorSyntaxRemains(converted);
+        assertCoreLustre(converted);
+        assertContainsIgnoringWhitespace(converted,
+                "m, s = ([A[0] + B[0], A[1] + B[1], A[2] + B[2]], "
+                        + "(((0 + (A[0] + B[0])) + (A[1] + B[1])) + (A[2] + B[2])))");
+    }
+
+    @Test
+    public void dollarAliasMapfoldPlusLowersToTupleArrayAndFoldAccumulator() {
+        String converted = convert(mapfoldNode("(mapfold << $+$; 3 >>)(0, A, B)"));
+
+        assertNoIteratorSyntaxRemains(converted);
+        assertFalse(converted.contains("$+$"), converted);
+        assertCoreLustre(converted);
+        assertContainsIgnoringWhitespace(converted,
+                "m, s = ([A[0] + B[0], A[1] + B[1], A[2] + B[2]], "
+                        + "(((0 + (A[0] + B[0])) + (A[1] + B[1])) + (A[2] + B[2])))");
+    }
+
+    @Test
     public void unsupportedIteratorsFailClearly() {
-        assertUnsupportedIterator("mapi", "(mapi << $+$; 3 >>)(A, B)");
-        assertUnsupportedIterator("foldi", "(foldi << $+$; 3 >>)(0, A)");
-        assertUnsupportedIterator("mapfold", "(mapfold << $+$; 3 >>)(0, A, B)");
         assertUnsupportedIterator("mapw", "(mapw << $+$; 3 >> if true default (0))(A, B)");
         assertUnsupportedIterator("mapwi", "(mapwi << $+$; 3 >> if true default (0))(A, B)");
         assertUnsupportedIterator("foldw", "(foldw << $+$; 3 >> if true)(0, A)");
@@ -94,9 +166,41 @@ public class SynlongIteratorLoweringTest {
     }
 
     @Test
+    public void mapiInvalidArityFailsClearly() {
+        SynlongToLustreException ex = assertThrows(SynlongToLustreException.class,
+                () -> convert(nodeWithArrayInputs("m", "int^3", "(mapi << $+$; 3 >>)(A, B)")));
+
+        assertMessageMentions(ex, "arity", "argument", "operand", "expects", "requires");
+    }
+
+    @Test
+    public void foldiInvalidArityFailsClearly() {
+        SynlongToLustreException ex = assertThrows(SynlongToLustreException.class,
+                () -> convert(nodeWithArrayInputs("s", "int", "(foldi << $+$; 3 >>)(A)")));
+
+        assertMessageMentions(ex, "arity", "argument", "operand", "expects", "requires");
+    }
+
+    @Test
+    public void mapfoldInvalidArityFailsClearly() {
+        SynlongToLustreException ex = assertThrows(SynlongToLustreException.class,
+                () -> convert(mapfoldNode("(mapfold << $+$; 3 >>)(0, A)")));
+
+        assertMessageMentions(ex, "arity", "argument", "operand", "expects", "requires");
+    }
+
+    @Test
     public void nonLiteralIteratorCountFailsClearly() {
         SynlongToLustreException ex = assertThrows(SynlongToLustreException.class,
                 () -> convert(nodeWithArrayInputs("m", "int^3", "(map << $+$; N >>)(A, B)")));
+
+        assertMessageMentions(ex, "literal", "integer", "count", "constant");
+    }
+
+    @Test
+    public void nonLiteralCountForDerivedIteratorFailsClearly() {
+        SynlongToLustreException ex = assertThrows(SynlongToLustreException.class,
+                () -> convert(nodeWithArrayInputs("m", "int^3", "(mapi << $+$; N >>)(A)")));
 
         assertMessageMentions(ex, "literal", "integer", "count", "constant");
     }
@@ -169,6 +273,15 @@ public class SynlongIteratorLoweringTest {
                 + "  N: int;\n"
                 + "let\n"
                 + "  " + output + " = " + expression + ";\n"
+                + "tel;\n";
+    }
+
+    private static String mapfoldNode(String expression) {
+        return "node Main() returns (m: int^3; s: int)\n"
+                + "var\n"
+                + "  A, B: int^3;\n"
+                + "let\n"
+                + "  m, s = " + expression + ";\n"
                 + "tel;\n";
     }
 

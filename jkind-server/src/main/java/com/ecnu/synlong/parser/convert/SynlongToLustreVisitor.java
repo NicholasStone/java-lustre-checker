@@ -1428,6 +1428,15 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         if ("fold".equals(iterator)) {
             return lowerFold(op, count, args);
         }
+        if ("mapi".equals(iterator)) {
+            return lowerMapi(op, count, args);
+        }
+        if ("foldi".equals(iterator)) {
+            return lowerFoldi(op, count, args);
+        }
+        if ("mapfold".equals(iterator)) {
+            return lowerMapfold(op, count, args);
+        }
         throw unsupportedIterator(iterator);
     }
 
@@ -1483,9 +1492,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
 
     private String lowerFold(String op, int count, List<String> args) {
         IteratorOperator operator = normalizeIteratorOperator(op);
-        if (operator.arity != 2) {
-            throw new SynlongToLustreException("Iterator fold only supports binary builtin operators");
-        }
+        requireBinaryIteratorOperator("fold", operator);
         if (args.size() != 2) {
             throw new SynlongToLustreException("Iterator fold with operator '" + operator.normalized
                     + "' expects initializer plus one array argument but got " + args.size());
@@ -1497,6 +1504,106 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
             acc = "(" + acc + " " + operator.normalized + " " + indexIteratorArg(array, i) + ")";
         }
         return acc;
+    }
+
+    private String lowerMapi(String op, int count, List<String> args) {
+        IteratorOperator operator = normalizeIteratorOperator(op);
+        requireBinaryIteratorOperator("mapi", operator);
+        if (args.size() != 1) {
+            throw new SynlongToLustreException("Iterator mapi with operator '" + operator.normalized
+                    + "' expects one array argument but got " + args.size());
+        }
+
+        List<String> elements = new ArrayList<>();
+        String array = args.get(0);
+        for (int i = 0; i < count; i++) {
+            /*
+             * V6 `mapi` exposes the current zero-based element index as the first operand
+             * of the supplied binary operator.  We lower that directly to a numeric literal
+             * instead of preserving iterator syntax, because the downstream core Lustre
+             * parser/typechecker only understands ordinary expressions.
+             *
+             * Example:
+             *   mapi<<+;3>>(A)  ==>  [0 + A[0], 1 + A[1], 2 + A[2]]
+             */
+            elements.add(i + " " + operator.normalized + " " + indexIteratorArg(array, i));
+        }
+        return "[" + String.join(", ", elements) + "]";
+    }
+
+    private String lowerFoldi(String op, int count, List<String> args) {
+        IteratorOperator operator = normalizeIteratorOperator(op);
+        requireBinaryIteratorOperator("foldi", operator);
+        if (args.size() != 2) {
+            throw new SynlongToLustreException("Iterator foldi with operator '" + operator.normalized
+                    + "' expects initializer plus one array argument but got " + args.size());
+        }
+
+        String acc = args.get(0);
+        String array = args.get(1);
+        for (int i = 0; i < count; i++) {
+            /*
+             * `foldi` has two distinct uses of the same binary operator:
+             *
+             *  1. build the per-element indexed term: (i op A[i])
+             *  2. fold that term into the accumulator: (acc op term)
+             *
+             * The explicit parentheses are intentional.  They preserve a deterministic
+             * left-nested tree for non-associative operators (for example `-`) and keep the
+             * generated text reviewable when users inspect converter output.
+             */
+            String indexedTerm = "(" + i + " " + operator.normalized + " " + indexIteratorArg(array, i) + ")";
+            acc = "(" + acc + " " + operator.normalized + " " + indexedTerm + ")";
+        }
+        return acc;
+    }
+
+    private String lowerMapfold(String op, int count, List<String> args) {
+        IteratorOperator operator = normalizeIteratorOperator(op);
+        requireBinaryIteratorOperator("mapfold", operator);
+        if (args.size() != 3) {
+            throw new SynlongToLustreException("Iterator mapfold with operator '" + operator.normalized
+                    + "' expects initializer plus two array arguments but got " + args.size());
+        }
+
+        String acc = args.get(0);
+        String leftArray = args.get(1);
+        String rightArray = args.get(2);
+        List<String> mappedElements = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            /*
+             * The approved first-pass `mapfold` semantics are "map, then fold the exact
+             * mapped values".  Generate each mapped element once and reuse that same string
+             * both in the returned array and in the folded accumulator.  This avoids a subtle
+             * class of bugs where the tuple's first component and second component drift if
+             * their formulas are maintained separately.
+             */
+            String mappedElement = indexIteratorArg(leftArray, i)
+                    + " " + operator.normalized + " "
+                    + indexIteratorArg(rightArray, i);
+            mappedElements.add(mappedElement);
+
+            /*
+             * Parenthesize the mapped element when it is folded.  Without this, generated
+             * code such as `acc + A[0] + B[0]` would rely on precedence/associativity and
+             * would not faithfully represent folding over the mapped value `(A[0] + B[0])`.
+             */
+            acc = "(" + acc + " " + operator.normalized + " (" + mappedElement + "))";
+        }
+
+        /*
+         * Core Lustre already accepts multi-LHS tuple assignments, so the converter returns
+         * a tuple expression and leaves the surrounding assignment visitor to emit:
+         *
+         *   m, s = ([...mapped...], foldedAccumulator)
+         */
+        return "([" + String.join(", ", mappedElements) + "], " + acc + ")";
+    }
+
+    private void requireBinaryIteratorOperator(String iterator, IteratorOperator operator) {
+        if (operator.arity != 2) {
+            throw new SynlongToLustreException("Iterator " + iterator + " only supports binary builtin operators");
+        }
     }
 
     private IteratorOperator normalizeIteratorOperator(String op) {
