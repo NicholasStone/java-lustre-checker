@@ -63,6 +63,92 @@ public class HighOrderLoweringTest {
     }
 
     @Test
+    public void lowersBatteryCellOverVoltageMapInRealisticController() throws Exception {
+        String synlong =
+                "type voltage_array = real^4;\n" +
+                "type flag_array = bool^4;\n" +
+                "node main(cellVoltage : voltage_array; maxVoltage : voltage_array) returns (overVoltage : flag_array)\n" +
+                "let\n" +
+                "  overVoltage = (map << $>$; 4 >>)(cellVoltage, maxVoltage);\n" +
+                "tel;\n";
+
+        String lustre = convertPreservingReferenceResult(synlong);
+
+        assertContainsIgnoringWhitespace(lustre, "overVoltage = [");
+        assertContainsIgnoringWhitespace(lustre, "cellVoltage[0] > maxVoltage[0]");
+        assertContainsIgnoringWhitespace(lustre, "cellVoltage[1] > maxVoltage[1]");
+        assertContainsIgnoringWhitespace(lustre, "cellVoltage[2] > maxVoltage[2]");
+        assertContainsIgnoringWhitespace(lustre, "cellVoltage[3] > maxVoltage[3]");
+        assertNoSuccessResidue(lustre);
+        assertParsesAsLustre(lustre);
+    }
+
+    @Test
+    public void lowersVehicleWheelTorqueCorrectionMapInRealisticController() throws Exception {
+        String synlong =
+                "type torque_array = int^4;\n" +
+                "node main(driverTorque : torque_array; stabilityCorrection : torque_array) returns (wheelTorque : torque_array)\n" +
+                "let\n" +
+                "  wheelTorque = (map << $+$; 4 >>)(driverTorque, stabilityCorrection);\n" +
+                "tel;\n";
+
+        String lustre = convertPreservingReferenceResult(synlong);
+
+        assertContainsIgnoringWhitespace(lustre, "wheelTorque = [");
+        assertContainsIgnoringWhitespace(lustre, "driverTorque[0] + stabilityCorrection[0]");
+        assertContainsIgnoringWhitespace(lustre, "driverTorque[1] + stabilityCorrection[1]");
+        assertContainsIgnoringWhitespace(lustre, "driverTorque[2] + stabilityCorrection[2]");
+        assertContainsIgnoringWhitespace(lustre, "driverTorque[3] + stabilityCorrection[3]");
+        assertNoSuccessResidue(lustre);
+        assertParsesAsLustre(lustre);
+    }
+
+    @Test
+    public void lowersInfusionPumpChannelEnableMapInRealisticController() throws Exception {
+        String synlong =
+                "type fault_array = bool^3;\n" +
+                "type enable_array = bool^3;\n" +
+                "node main(channelFault : fault_array) returns (channelEnabled : enable_array)\n" +
+                "let\n" +
+                "  channelEnabled = (map << not$; 3 >>)(channelFault);\n" +
+                "tel;\n";
+
+        String lustre = convertPreservingReferenceResult(synlong);
+
+        assertContainsIgnoringWhitespace(lustre, "channelEnabled = [");
+        assertContainsIgnoringWhitespace(lustre, "not channelFault[0]");
+        assertContainsIgnoringWhitespace(lustre, "not channelFault[1]");
+        assertContainsIgnoringWhitespace(lustre, "not channelFault[2]");
+        assertNoSuccessResidue(lustre);
+        assertParsesAsLustre(lustre);
+    }
+
+    @Test
+    public void lowersTrainDoorInterlockPrefixOperatorsInRealisticController() throws Exception {
+        String synlong =
+                "node main(doorClosed : bool; emergencyStop : bool; tractionRequest : bool; measuredSpeed : int; calibrationOffset : int) " +
+                "returns (tractionAllowed : bool; calibratedSpeed : int)\n" +
+                "var\n" +
+                "  noEmergency : bool;\n" +
+                "  doorReady : bool;\n" +
+                "let\n" +
+                "  noEmergency = not$(emergencyStop);\n" +
+                "  doorReady = $and$(doorClosed, noEmergency);\n" +
+                "  tractionAllowed = $and$(doorReady, tractionRequest);\n" +
+                "  calibratedSpeed = $-$(measuredSpeed, calibrationOffset);\n" +
+                "tel;\n";
+
+        String lustre = convertPreservingReferenceResult(synlong);
+
+        assertContainsIgnoringWhitespace(lustre, "noEmergency = not emergencyStop");
+        assertContainsIgnoringWhitespace(lustre, "doorReady = doorClosed and noEmergency");
+        assertContainsIgnoringWhitespace(lustre, "tractionAllowed = doorReady and tractionRequest");
+        assertContainsIgnoringWhitespace(lustre, "calibratedSpeed = measuredSpeed - calibrationOffset");
+        assertNoSuccessResidue(lustre);
+        assertParsesAsLustre(lustre);
+    }
+
+    @Test
     public void rejectsUnsupportedAdvancedIteratorsBeforeLustreParsing() {
         String synlong =
                 "type int_array = int^3;\n" +
