@@ -29,6 +29,10 @@ public class SynlongConverter {
      * @return Lustre代码字符串
      */
     public static String convert(String synlongCode) {
+        return convertWithMetadata(synlongCode).getLustre();
+    }
+
+    public static HighOrderConversionResult convertWithMetadata(String synlongCode) {
         try {
             // 解析阶段只处理 Synlong.g4 的源语法；生成的 parser Java 不应手工修改。
             CharStream input = CharStreams.fromString(synlongCode);
@@ -57,7 +61,7 @@ public class SynlongConverter {
                 log.warn("写入 result.txt 失败: {}", e.getMessage());
             }
 
-            return result;
+            return new HighOrderConversionResult(result, context.getSourceMapEntries());
         } catch (Exception e) {
             log.error("Synlong转换Lustre失败: ", e);
             throw new SynlongToLustreException(e.getMessage());

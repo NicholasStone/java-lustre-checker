@@ -7,8 +7,9 @@ import java.util.List;
  * Lowers Synlong high-order prefix operators and the PR1 supported iterator
  * subset to ordinary Lustre expressions accepted by JKind.
  *
- * <p>Boundary: direct prefix operators and fixed-count {@code map} are lowered;
- * casts, fold/mapi/mapfold, and conditional iterators fail before JKind parsing.</p>
+ * <p>Boundary: direct prefix operators, fixed-count {@code map}, and fixed-count
+ * {@code fold} are expression-lowered here. Restricted {@code mapfold} is handled
+ * by the visitor because it emits multiple surrounding equations and local temps.</p>
  */
 public class HighOrderLowerer {
     public String lowerApply(String operator, List<String> arguments) {
@@ -43,23 +44,64 @@ public class HighOrderLowerer {
     }
 
     public String lowerIterator(String iterator, String operator, String countText, List<String> arguments) {
-        // PR1 expands map with a literal count into an array constructor; all other iterator shapes remain unsupported by design.
+        return lowerIteratorWithSourceMap(iterator, operator, countText, arguments).getExpression();
+    }
+
+    public HighOrderLoweringResult lowerIteratorWithSourceMap(String iterator, String operator, String countText, List<String> arguments) {
         String normalizedIterator = iterator == null ? "" : iterator.trim();
-        if (!"map".equals(normalizedIterator)) {
-            throw new SynlongToLustreException("Unsupported high-order iterator '" + normalizedIterator
-                    + "': PR1 lowering supports only fixed-count map");
+        if ("map".equals(normalizedIterator)) {
+            return lowerMap(operator, countText, arguments);
+        }
+        if ("fold".equals(normalizedIterator)) {
+            return lowerFold(operator, countText, arguments);
         }
 
-        int count = parsePositiveCount(countText, normalizedIterator);
+        throw new SynlongToLustreException("Unsupported high-order iterator '" + normalizedIterator
+                + "': supported fixed-count iterators are map and fold; restricted mapfold requires assignment context");
+    }
+
+    public int parseIteratorCount(String countText, String iterator) {
+        return parsePositiveCount(countText, iterator);
+    }
+
+    private HighOrderLoweringResult lowerMap(String operator, String countText, List<String> arguments) {
+        int count = parsePositiveCount(countText, "map");
         List<String> elements = new ArrayList<String>();
+        List<HighOrderSourceMapEntry> entries = new ArrayList<HighOrderSourceMapEntry>();
         for (int i = 0; i < count; i++) {
             List<String> indexedArgs = new ArrayList<String>();
             for (String argument : arguments) {
                 indexedArgs.add(indexArgument(argument, i));
             }
-            elements.add(lowerApply(operator, indexedArgs));
+            String generated = lowerApply(operator, indexedArgs);
+            elements.add(generated);
+            entries.add(new HighOrderSourceMapEntry("map", normalizeOperator(operator), count, i, indexedArgs, generated));
         }
-        return "[" + join(elements) + "]";
+        return new HighOrderLoweringResult("[" + join(elements) + "]", entries);
+    }
+
+    private HighOrderLoweringResult lowerFold(String operator, String countText, List<String> arguments) {
+        int count = parsePositiveCount(countText, "fold");
+        if (arguments == null || arguments.size() < 2) {
+            throw new SynlongToLustreException("Unsupported high-order fold: expected initial accumulator and at least one array argument");
+        }
+
+        String accumulator = arguments.get(0);
+        List<String> arrayArguments = arguments.subList(1, arguments.size());
+        List<HighOrderSourceMapEntry> entries = new ArrayList<HighOrderSourceMapEntry>();
+
+        for (int i = 0; i < count; i++) {
+            List<String> stageArgs = new ArrayList<String>();
+            stageArgs.add(accumulator);
+            for (String argument : arrayArguments) {
+                stageArgs.add(indexArgument(argument, i));
+            }
+            String generated = lowerApply(operator, stageArgs);
+            entries.add(new HighOrderSourceMapEntry("fold", normalizeOperator(operator), count, i, stageArgs, generated));
+            accumulator = "(" + generated + ")";
+        }
+
+        return new HighOrderLoweringResult(accumulator, entries);
     }
 
     public SynlongToLustreException unsupportedIterator(String iterator, String reason) {
@@ -154,7 +196,7 @@ public class HighOrderLowerer {
         }
     }
 
-    private String indexArgument(String argument, int index) {
+    public String indexArgument(String argument, int index) {
         String trimmed = argument == null ? "" : argument.trim();
         if (trimmed.isEmpty()) {
             throw new SynlongToLustreException("Unsupported high-order map: empty argument at index " + index);

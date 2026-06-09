@@ -13,6 +13,9 @@ public class SynlongToLustreContext {
     private final Map<String, String> stateNameMap = new LinkedHashMap<>();
     private final Set<String> declaredVars = new LinkedHashSet<>();
     private final Set<String> globalVars = new LinkedHashSet<>();
+    private final Map<String, String> typeAliases = new LinkedHashMap<>();
+    private final List<String> generatedLocalVars = new ArrayList<>();
+    private final List<HighOrderSourceMapEntry> sourceMapEntries = new ArrayList<>();
     // 初始状态
     private String initialState = null;
     // 最终状态集合
@@ -58,6 +61,45 @@ public class SynlongToLustreContext {
     
     public void addGlobalVariable(String var) {
         globalVars.add(var);
+    }
+
+    public void addTypeAlias(String name, String type) {
+        typeAliases.put(name, type);
+    }
+
+    public String resolveTypeAlias(String type) {
+        String current = type;
+        Set<String> seen = new LinkedHashSet<>();
+        while (current != null && typeAliases.containsKey(current) && !seen.contains(current)) {
+            seen.add(current);
+            current = typeAliases.get(current);
+        }
+        return current;
+    }
+
+    public void addGeneratedLocalVar(String name, String type) {
+        generatedLocalVars.add("\t" + name + " : " + type + ";\n");
+        addGlobalVariable(name);
+    }
+
+    public int generatedLocalVarCount() {
+        return generatedLocalVars.size();
+    }
+
+    public List<String> getGeneratedLocalVarsFrom(int startIndex) {
+        return Collections.unmodifiableList(generatedLocalVars.subList(startIndex, generatedLocalVars.size()));
+    }
+
+    public void addSourceMapEntries(List<HighOrderSourceMapEntry> entries) {
+        sourceMapEntries.addAll(entries);
+    }
+
+    public void addSourceMapEntry(HighOrderSourceMapEntry entry) {
+        sourceMapEntries.add(entry);
+    }
+
+    public List<HighOrderSourceMapEntry> getSourceMapEntries() {
+        return Collections.unmodifiableList(sourceMapEntries);
     }
     
     public boolean isGlobalVariable(String var) {

@@ -16,6 +16,8 @@ import java.util.*;
 public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     private final SynlongToLustreContext context;
     private final HighOrderLowerer highOrderLowerer;
+    private Map<String, String> currentOpVariableTypes = Collections.emptyMap();
+    private Set<String> currentOpReservedNames = Collections.emptySet();
 
     public SynlongToLustreVisitor(SynlongToLustreContext context) {
         this.context = context;
@@ -362,6 +364,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
             if (typeDecl.type_def() != null) {
                 String typeDef = visit(typeDecl.type_def());
                 typeDefStr += " = " + typeDef;
+                context.addTypeAlias(typeName, typeDef);
                 
                 // 如果是结构体类型，收集字段信息
                 if (typeDecl.type_def() instanceof SynlongParser.TypeExprDefContext) {
@@ -501,15 +504,65 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
           .append(params)
           .append(" ").append(returns).append(";\n");
         
-        if (ctx.op_body() != null) {
-            String opBodyContent = visit(ctx.op_body());
-            sb.append(opBodyContent);
+        Map<String, String> previousVariableTypes = currentOpVariableTypes;
+        Set<String> previousReservedNames = currentOpReservedNames;
+        Map<String, String> opVariableTypes = collectUserOpVariableTypes(ctx);
+        currentOpVariableTypes = opVariableTypes;
+        currentOpReservedNames = new LinkedHashSet<String>(opVariableTypes.keySet());
+        try {
+            if (ctx.op_body() != null) {
+                String opBodyContent = visit(ctx.op_body());
+                sb.append(opBodyContent);
+            }
+        } finally {
+            currentOpVariableTypes = previousVariableTypes;
+            currentOpReservedNames = previousReservedNames;
         }
         
         // 添加到全局节点定义收集器
         context.addGlobalNodeDef(sb.toString());
         
         return sb.toString();
+    }
+
+    private Map<String, String> collectUserOpVariableTypes(SynlongParser.UserOpDeclContext ctx) {
+        Map<String, String> types = new LinkedHashMap<String, String>();
+        collectParamTypes(types, ctx.params());
+        if (ctx.returns_clause() != null && ctx.returns_clause().params() != null) {
+            collectParamTypes(types, ctx.returns_clause().params());
+        }
+        if (ctx.op_body() instanceof SynlongParser.FullOpBodyContext) {
+            SynlongParser.FullOpBodyContext fullBody = (SynlongParser.FullOpBodyContext) ctx.op_body();
+            if (fullBody.local_block() != null) {
+                collectLocalTypes(types, fullBody.local_block());
+            }
+        }
+        return types;
+    }
+
+    private void collectParamTypes(Map<String, String> types, SynlongParser.ParamsContext params) {
+        if (params == null) {
+            return;
+        }
+        for (SynlongParser.Var_declsContext varDecls : params.var_decls()) {
+            addVarDeclTypes(types, varDecls);
+        }
+    }
+
+    private void collectLocalTypes(Map<String, String> types, SynlongParser.Local_blockContext localBlock) {
+        if (localBlock == null) {
+            return;
+        }
+        for (SynlongParser.Var_declsContext varDecls : localBlock.var_decls()) {
+            addVarDeclTypes(types, varDecls);
+        }
+    }
+
+    private void addVarDeclTypes(Map<String, String> types, SynlongParser.Var_declsContext varDecls) {
+        String type = visit(varDecls.type_expr());
+        for (SynlongParser.Var_idContext varId : varDecls.var_id()) {
+            types.put(varId.getText(), type);
+        }
     }
 
     @Override
@@ -566,6 +619,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     @Override
     public String visitFullOpBody(SynlongParser.FullOpBodyContext ctx) {
         StringBuilder sb = new StringBuilder();
+        int generatedLocalStart = context.generatedLocalVarCount();
         
         // 1. 首先处理原始的local_block
         String originalLocalVars = "";
@@ -576,7 +630,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         // 2. 处理let_block
         String letBlockContent = visit(ctx.let_block());
         
-        // 3. 生成完整的var块（包括状态机变量）
+        // 3. 生成完整的var块（包括状态机变量和高阶展开临时变量）
         StringBuilder varBlock = new StringBuilder();
         if (context.hasStateMachineVars()) {
             varBlock.append("var\n");
@@ -601,9 +655,14 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
             if (!stateMachineVars.isEmpty()) {
                 varBlock.append(stateMachineVars);
             }
+            appendGeneratedLocalVars(varBlock, generatedLocalStart);
         } else if (!originalLocalVars.isEmpty()) {
             // 如果没有状态机变量，直接使用原始局部变量
             varBlock.append(originalLocalVars);
+            appendGeneratedLocalVars(varBlock, generatedLocalStart);
+        } else if (context.generatedLocalVarCount() > generatedLocalStart) {
+            varBlock.append("var\n");
+            appendGeneratedLocalVars(varBlock, generatedLocalStart);
         }
         
         // 4. 组合结果
@@ -629,6 +688,14 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         return sb.toString();
     }
 
+    private void appendGeneratedLocalVars(StringBuilder varBlock, int generatedLocalStart) {
+        for (String generatedLocalVar : context.getGeneratedLocalVarsFrom(generatedLocalStart)) {
+            if (varBlock.indexOf(generatedLocalVar) < 0) {
+                varBlock.append(generatedLocalVar);
+            }
+        }
+    }
+
     @Override
     public String visitVar_decls(SynlongParser.Var_declsContext ctx) {
         StringBuilder sb = new StringBuilder();
@@ -645,7 +712,114 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
 
     @Override
     public String visitAssignment(SynlongParser.AssignmentContext ctx) {
+        String mapfold = tryVisitMapfoldAssignment(ctx);
+        if (mapfold != null) {
+            return mapfold;
+        }
         return visit(ctx.lhs()) + " = " + visit(ctx.expr());
+    }
+
+    private String tryVisitMapfoldAssignment(SynlongParser.AssignmentContext ctx) {
+        if (!(ctx.expr() instanceof SynlongParser.ApplyExprContext)) {
+            return null;
+        }
+        SynlongParser.ApplyExprContext applyExpr = (SynlongParser.ApplyExprContext) ctx.expr();
+        if (!(applyExpr.apply_expr() instanceof SynlongParser.IteratorApplyContext)) {
+            return null;
+        }
+        SynlongParser.IteratorApplyContext iteratorApply = (SynlongParser.IteratorApplyContext) applyExpr.apply_expr();
+        String iterator = visit(iteratorApply.iterator());
+        if (!"mapfold".equals(iterator)) {
+            return null;
+        }
+        return lowerMapfoldAssignment(ctx, iteratorApply);
+    }
+
+    private String lowerMapfoldAssignment(SynlongParser.AssignmentContext assignment,
+                                          SynlongParser.IteratorApplyContext iteratorApply) {
+        List<String> lhs = lhsIds(assignment.lhs());
+        if (lhs.size() != 2) {
+            throw new SynlongToLustreException("Unsupported high-order mapfold: expected exactly two LHS identifiers for accumulator and mapped array");
+        }
+
+        String operator = visit(iteratorApply.prefix_operator());
+        if (operator == null || !operator.matches("[A-Za-z_][A-Za-z_0-9]*")) {
+            throw new SynlongToLustreException("Unsupported high-order mapfold: requires an identifier step node/function with accumulator and mapped outputs");
+        }
+
+        int count = highOrderLowerer.parseIteratorCount(visit(iteratorApply.const_expr()), "mapfold");
+        List<String> arguments = visitListItems(iteratorApply.list());
+        if (arguments.size() < 2) {
+            throw new SynlongToLustreException("Unsupported high-order mapfold: expected initial accumulator and at least one array argument");
+        }
+
+        String accumulatorLhs = lhs.get(0);
+        String mappedLhs = lhs.get(1);
+        String accumulatorType = currentOpVariableTypes.get(accumulatorLhs);
+        String mappedElementType = getArrayElementType(mappedLhs);
+        if (accumulatorType == null || mappedElementType == null) {
+            throw new SynlongToLustreException("Unsupported high-order mapfold: cannot determine accumulator or mapped element type for generated temporaries");
+        }
+
+        List<String> equations = new ArrayList<String>();
+        List<String> mappedTemps = new ArrayList<String>();
+        String accumulator = arguments.get(0);
+        List<String> arrayArguments = arguments.subList(1, arguments.size());
+
+        for (int i = 0; i < count; i++) {
+            String accumulatorOut = i == count - 1 ? accumulatorLhs : allocateMapfoldTemp("__mapfold_" + accumulatorLhs + "_" + (i + 1), accumulatorType);
+            String mappedOut = allocateMapfoldTemp("__mapfold_" + mappedLhs + "_" + i, mappedElementType);
+            mappedTemps.add(mappedOut);
+
+            List<String> callArgs = new ArrayList<String>();
+            callArgs.add(accumulator);
+            for (String argument : arrayArguments) {
+                callArgs.add(highOrderLowerer.indexArgument(argument, i));
+            }
+
+            String equation = accumulatorOut + ", " + mappedOut + " = " + operator + "(" + String.join(", ", callArgs) + ")";
+            equations.add(equation);
+            context.addSourceMapEntry(new HighOrderSourceMapEntry("mapfold", operator, count, i, callArgs, equation));
+            accumulator = accumulatorOut;
+        }
+
+        equations.add(mappedLhs + " = [" + String.join(", ", mappedTemps) + "]");
+        return String.join(";\n\t", equations);
+    }
+
+    private String getArrayElementType(String varName) {
+        String type = context.resolveTypeAlias(currentOpVariableTypes.get(varName));
+        if (type == null) {
+            return null;
+        }
+        int bracket = type.indexOf('[');
+        if (bracket > 0 && type.endsWith("]")) {
+            return type.substring(0, bracket);
+        }
+        return null;
+    }
+
+    private String allocateMapfoldTemp(String baseName, String type) {
+        String candidate = baseName;
+        int suffix = 1;
+        while (currentOpReservedNames.contains(candidate)) {
+            candidate = baseName + "_" + suffix;
+            suffix++;
+        }
+        currentOpReservedNames.add(candidate);
+        context.addGeneratedLocalVar(candidate, type);
+        return candidate;
+    }
+
+    private List<String> lhsIds(SynlongParser.LhsContext lhsContext) {
+        List<String> ids = new ArrayList<String>();
+        if (lhsContext instanceof SynlongParser.LhsListContext) {
+            SynlongParser.LhsListContext lhsList = (SynlongParser.LhsListContext) lhsContext;
+            for (SynlongParser.Lhs_idContext lhsId : lhsList.lhs_id()) {
+                ids.add(lhsId.getText());
+            }
+        }
+        return ids;
     }
 
     @Override
@@ -1368,7 +1542,9 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         String iterator = visit(ctx.iterator());
         String op = visit(ctx.prefix_operator());
         String count = visit(ctx.const_expr());
-        return highOrderLowerer.lowerIterator(iterator, op, count, visitListItems(ctx.list()));
+        HighOrderLoweringResult result = highOrderLowerer.lowerIteratorWithSourceMap(iterator, op, count, visitListItems(ctx.list()));
+        context.addSourceMapEntries(result.getSourceMapEntries());
+        return result.getExpression();
     }
 
     @Override

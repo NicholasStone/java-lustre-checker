@@ -1,10 +1,10 @@
 # Synlong high-order operators lowered for JKind
 
-This note describes the current PR1 lowering subset in `jkind-server` after the
+This note describes the current lowering subset in `jkind-server` after the
 Synlong parser has accepted high-order syntax but before the generated text is
 sent to JKind's Lustre parser.
 
-## Supported in PR1
+## Supported subset
 
 ### Prefix operator applications
 
@@ -39,8 +39,8 @@ or `flatten_Type(...)`.
 
 ### Fixed-count `map`
 
-The only iterator lowered in PR1 is fixed-count `map` with a positive integer
-literal count:
+Fixed-count `map` with a positive integer literal count is lowered into a Lustre
+array constructor:
 
 ```synlong
 c = (map << $+$; 3 >>)(a, b);
@@ -56,26 +56,86 @@ Arguments are extracted from the Synlong parse tree, not by splitting rendered
 text on commas. Each argument is indexed for every generated element; complex
 arguments are parenthesized before indexing.
 
-## Explicitly unsupported in PR1
+### Fixed-count `fold`
+
+Fixed-count `fold` is implemented as a `red`-style accumulator reduction:
+
+```synlong
+c = (fold << $+$; 3 >>)(0, a);
+```
+
+becomes equivalent to:
+
+```lustre
+c = (((0 + a[0]) + a[1]) + a[2]);
+```
+
+The first argument is the initial accumulator. Remaining arguments are indexed
+per stage and passed to the prefix operator after the accumulator. Counts must
+be fixed positive integer literals.
+
+### Restricted fixed-count `mapfold`
+
+`mapfold` is supported only in the bounded `fillred`-style form where the
+operator is an identifier node/function and the assignment has two comma LHS
+variables:
+
+```synlong
+carryOut, sum = (mapfold << fulladd; 3 >>)(carryIn, x, y);
+```
+
+The step operator must return two outputs: next accumulator first, mapped element
+second. The converter emits staged equations and deterministic local temporary
+variables in the surrounding node, for example:
+
+```lustre
+__mapfold_carryOut_1, __mapfold_sum_0 = fulladd(carryIn, x[0], y[0]);
+__mapfold_carryOut_2, __mapfold_sum_1 = fulladd(__mapfold_carryOut_1, x[1], y[1]);
+carryOut, __mapfold_sum_2 = fulladd(__mapfold_carryOut_2, x[2], y[2]);
+sum = [__mapfold_sum_0, __mapfold_sum_1, __mapfold_sum_2];
+```
+
+Temporary accumulator type is taken from the first LHS variable. Mapped element
+temporary type is taken from the element type of the second LHS array, including
+through simple type aliases such as `type bool_array = bool^3`.
+
+### Source-map metadata
+
+`SynlongConverter.convert(String)` preserves the original string-only behavior.
+For tests and thesis evidence, `SynlongConverter.convertWithMetadata(String)`
+returns `HighOrderConversionResult`, which contains:
+
+- `lustre`: the generated Lustre text;
+- ordered `HighOrderSourceMapEntry` records for each lowered `map`, `fold`, and
+  `mapfold` stage.
+
+Each source-map entry records iterator kind, operator text, fixed count, stage
+index, indexed source arguments, and generated expression/equation fragment.
+The order is deterministic across repeated conversions of the same source.
+
+## Explicitly unsupported
 
 The converter raises `SynlongToLustreException` instead of passing unsupported
 high-order syntax through to JKind for these cases:
 
-- non-`map` iterators in the shared iterator form: `mapi`, `fold`, `foldi`, and
-  `mapfold`;
+- index-aware iterators in the shared iterator form: `mapi` and `foldi`;
+- prefix-operator `mapfold`, for example `(mapfold << $+$; 3 >>)(0, a)`;
+- `mapfold` without exactly two comma LHS identifiers or without enough type
+  information to declare generated temporaries;
 - conditional iterators: `mapw`, `mapwi`, `foldw`, and `foldwi`;
 - dynamic, zero, negative, or non-integer-literal iterator counts;
 - casts represented as high-order prefix operators: `short$`, `int$`, `float$`,
   and `real$`;
 - wrong arity for supported unary or binary prefix operators.
 
-These gates are intentional until the missing Lustre v6/Synlong semantics for
-index order, fold accumulator conventions, and conditional iterator behavior are
-confirmed.
+These gates are intentional. The implemented subset is fixed-count and
+JKind-parseable; conditional, dynamic, and broader V6 iterator semantics remain
+future work.
 
 ## Residue and parser expectations
 
 Successful generated Lustre should not contain Synlong high-order residue such
-as `<<`, `>>`, `$+$`, `not$`, `map <<`, or `fold <<`. The regression tests in
-`HighOrderLoweringTest` cover this residue check and parse successful outputs
-with `LustreService.parseLustre`.
+as `<<`, `>>`, `$+$`, `not$`, `map <<`, `fold <<`, or `mapfold <<`. The
+regression tests in `HighOrderLoweringTest` and `HighOrderSourceMapTest` cover
+residue checks, source-map determinism, unsupported boundaries, and parsing
+successful outputs with `LustreService.parseLustre`.
