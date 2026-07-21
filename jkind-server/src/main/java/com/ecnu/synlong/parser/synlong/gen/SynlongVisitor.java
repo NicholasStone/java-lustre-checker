@@ -1,4 +1,4 @@
-// Generated from /Users/wei/IdeaProjects/java-lustre-checker/jkind-server/src/main/java/com/ecnu/synlong/parser/synlong/Synlong.g4 by ANTLR 4.13.2
+// Generated from Synlong.g4 by ANTLR 4.13.2
 package com.ecnu.synlong.parser.synlong.gen;
 import org.antlr.v4.runtime.tree.ParseTreeVisitor;
 
@@ -242,6 +242,13 @@ public interface SynlongVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitConstBinRelOp(SynlongParser.ConstBinRelOpContext ctx);
 	/**
+	 * Visit a parse tree produced by the {@code ConstParen}
+	 * labeled alternative in {@link SynlongParser#const_expr}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitConstParen(SynlongParser.ConstParenContext ctx);
+	/**
 	 * Visit a parse tree produced by the {@code ConstBinBoolOp}
 	 * labeled alternative in {@link SynlongParser#const_expr}.
 	 * @param ctx the parse tree
@@ -380,6 +387,13 @@ public interface SynlongVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitEmptyLhs(SynlongParser.EmptyLhsContext ctx);
 	/**
+	 * Visit a parse tree produced by the {@code DiscardLhs}
+	 * labeled alternative in {@link SynlongParser#lhs}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitDiscardLhs(SynlongParser.DiscardLhsContext ctx);
+	/**
 	 * Visit a parse tree produced by the {@code LhsList}
 	 * labeled alternative in {@link SynlongParser#lhs}.
 	 * @param ctx the parse tree
@@ -450,6 +464,30 @@ public interface SynlongVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitLet_block(SynlongParser.Let_blockContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link SynlongParser#activate_block}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitActivate_block(SynlongParser.Activate_blockContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link SynlongParser#activate_if_chain}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitActivate_if_chain(SynlongParser.Activate_if_chainContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link SynlongParser#activate_else}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitActivate_else(SynlongParser.Activate_elseContext ctx);
+	/**
+	 * Visit a parse tree produced by {@link SynlongParser#activate_branch}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitActivate_branch(SynlongParser.Activate_branchContext ctx);
 	/**
 	 * Visit a parse tree produced by {@link SynlongParser#transition}.
 	 * @param ctx the parse tree
@@ -527,6 +565,13 @@ public interface SynlongVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitSimpleId(SynlongParser.SimpleIdContext ctx);
 	/**
+	 * Visit a parse tree produced by the {@code SimpleLast}
+	 * labeled alternative in {@link SynlongParser#simple_expr}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitSimpleLast(SynlongParser.SimpleLastContext ctx);
+	/**
 	 * Visit a parse tree produced by the {@code StructAccess}
 	 * labeled alternative in {@link SynlongParser#simple_expr}.
 	 * @param ctx the parse tree
@@ -548,19 +593,19 @@ public interface SynlongVisitor<T> extends ParseTreeVisitor<T> {
 	 */
 	T visitUnaryOp(SynlongParser.UnaryOpContext ctx);
 	/**
+	 * Visit a parse tree produced by the {@code SimpleParen}
+	 * labeled alternative in {@link SynlongParser#simple_expr}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitSimpleParen(SynlongParser.SimpleParenContext ctx);
+	/**
 	 * Visit a parse tree produced by the {@code SimpleAtom}
 	 * labeled alternative in {@link SynlongParser#simple_expr}.
 	 * @param ctx the parse tree
 	 * @return the visitor result
 	 */
 	T visitSimpleAtom(SynlongParser.SimpleAtomContext ctx);
-	/**
-	 * Visit a parse tree produced by the {@code SimpleIdWithParens}
-	 * labeled alternative in {@link SynlongParser#simple_expr}.
-	 * @param ctx the parse tree
-	 * @return the visitor result
-	 */
-	T visitSimpleIdWithParens(SynlongParser.SimpleIdWithParensContext ctx);
 	/**
 	 * Visit a parse tree produced by the {@code BinRelOp}
 	 * labeled alternative in {@link SynlongParser#simple_expr}.
@@ -582,6 +627,13 @@ public interface SynlongVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitBinArithOp(SynlongParser.BinArithOpContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code ScadeRealCast}
+	 * labeled alternative in {@link SynlongParser#simple_expr}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitScadeRealCast(SynlongParser.ScadeRealCastContext ctx);
 	/**
 	 * Visit a parse tree produced by the {@code BinBoolOp}
 	 * labeled alternative in {@link SynlongParser#simple_expr}.
@@ -779,6 +831,13 @@ public interface SynlongVisitor<T> extends ParseTreeVisitor<T> {
 	 * @return the visitor result
 	 */
 	T visitIteratorApply(SynlongParser.IteratorApplyContext ctx);
+	/**
+	 * Visit a parse tree produced by the {@code LegacyIteratorApply}
+	 * labeled alternative in {@link SynlongParser#apply_expr}.
+	 * @param ctx the parse tree
+	 * @return the visitor result
+	 */
+	T visitLegacyIteratorApply(SynlongParser.LegacyIteratorApplyContext ctx);
 	/**
 	 * Visit a parse tree produced by the {@code MapwApply}
 	 * labeled alternative in {@link SynlongParser#apply_expr}.

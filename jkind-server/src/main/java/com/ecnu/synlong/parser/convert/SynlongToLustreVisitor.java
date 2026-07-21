@@ -18,6 +18,10 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     private final HighOrderLowerer highOrderLowerer;
     private Map<String, String> currentOpVariableTypes = Collections.emptyMap();
     private Set<String> currentOpReservedNames = Collections.emptySet();
+    private Map<String, String> currentActivateRenames = Collections.emptyMap();
+    private Map<String, String> currentOpLocalTypes = Collections.emptyMap();
+    private boolean currentOpHasStateMachine;
+    private boolean collectingStateAssignments;
 
     public SynlongToLustreVisitor(SynlongToLustreContext context) {
         this.context = context;
@@ -26,6 +30,16 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
 
     @Override
     public String visitProgram(SynlongParser.ProgramContext ctx) {
+        // State collection sometimes needs structure metadata (for example, to
+        // split a multi-output flatten call into state-guarded field equations).
+        // Collect types once before walking state bodies; source files are not
+        // required to declare type blocks before nodes or constants.
+        for (SynlongParser.DeclsContext decl : ctx.decls()) {
+            if (decl instanceof SynlongParser.TypeDeclarationContext) {
+                visit(decl);
+            }
+        }
+
         // Phase 1 must see every state/local/helper before emission; generation
         // depends on complete context to avoid order-sensitive Lustre output.
         collectStateMachineInfo(ctx);
@@ -56,11 +70,27 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
             // 收集全局变量（输入、输出、局部变量）
             collectGlobalVariables(userOpCtx);
             
-            if (userOpCtx.op_body() instanceof SynlongParser.FullOpBodyContext) {
-                SynlongParser.FullOpBodyContext fullBody = (SynlongParser.FullOpBodyContext) userOpCtx.op_body();
-                if (fullBody.let_block() != null) {
-                    collectStateMachineFromLetBlock(fullBody.let_block());
+            Map<String, String> previousTypes = currentOpVariableTypes;
+            Set<String> previousNames = currentOpReservedNames;
+            Map<String, String> previousLocals = currentOpLocalTypes;
+            boolean previousCollecting = collectingStateAssignments;
+            currentOpVariableTypes = collectUserOpVariableTypes(userOpCtx);
+            currentOpReservedNames = new LinkedHashSet<String>(currentOpVariableTypes.keySet());
+            currentOpLocalTypes = new LinkedHashMap<String, String>();
+            collectingStateAssignments = true;
+            try {
+                if (userOpCtx.op_body() instanceof SynlongParser.FullOpBodyContext) {
+                    SynlongParser.FullOpBodyContext fullBody = (SynlongParser.FullOpBodyContext) userOpCtx.op_body();
+                    collectLocalTypes(currentOpLocalTypes, fullBody.local_block());
+                    if (fullBody.let_block() != null) {
+                        collectStateMachineFromLetBlock(fullBody.let_block());
+                    }
                 }
+            } finally {
+                currentOpVariableTypes = previousTypes;
+                currentOpReservedNames = previousNames;
+                currentOpLocalTypes = previousLocals;
+                collectingStateAssignments = previousCollecting;
             }
         }
     }
@@ -129,8 +159,14 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
      */
     private void collectStateMachineInfo(SynlongParser.State_machineContext ctx) {
         for (SynlongParser.State_declContext stateDecl : ctx.state_decl()) {
-            String stateName = stateDecl.ID().getText();
-            context.addStateToEnum(stateName);
+            String sourceStateName = stateDecl.ID().getText();
+            String lustreStateName = "__state_" + sourceStateName;
+            context.addState(sourceStateName, lustreStateName);
+            context.addStateToEnum(lustreStateName);
+        }
+
+        for (SynlongParser.State_declContext stateDecl : ctx.state_decl()) {
+            String stateName = context.getLustreState(stateDecl.ID().getText());
             
             // 检查是否为初始状态或最终状态
             boolean isInitial = stateDecl.getText().contains("initial");
@@ -185,30 +221,23 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
      * 收集状态体内容
      */
     private void collectStateBodyContent(String stateName, SynlongParser.State_bodyContext stateBody) {
-        StringBuilder bodyContent = new StringBuilder();
-        
         if (stateBody instanceof SynlongParser.StateBodyWithLocalContext) {
             SynlongParser.StateBodyWithLocalContext localCtx = (SynlongParser.StateBodyWithLocalContext) stateBody;
-            bodyContent.append(visit(localCtx.local_block()));
-            // 收集let块中的赋值语句
             collectAssignmentsFromLetBlock(stateName, localCtx.let_block());
-            bodyContent.append(visit(localCtx.let_block()));
         } else if (stateBody instanceof SynlongParser.StateBodyLocalOnlyContext) {
-            SynlongParser.StateBodyLocalOnlyContext localCtx = (SynlongParser.StateBodyLocalOnlyContext) stateBody;
-            bodyContent.append(visit(localCtx.local_block()));
+            // Declarations were already collected by collectStateBodyVars.
         } else if (stateBody instanceof SynlongParser.StateBodyLetOnlyContext) {
             SynlongParser.StateBodyLetOnlyContext letCtx = (SynlongParser.StateBodyLetOnlyContext) stateBody;
-            // 收集let块中的赋值语句
             collectAssignmentsFromLetBlock(stateName, letCtx.let_block());
-            bodyContent.append(visit(letCtx.let_block()));
         } else if (stateBody instanceof SynlongParser.StateBodySingleEqContext) {
             SynlongParser.StateBodySingleEqContext eqCtx = (SynlongParser.StateBodySingleEqContext) stateBody;
-            // 收集单个赋值语句
             collectAssignmentFromEquation(stateName, eqCtx.equation());
-            bodyContent.append(visit(eqCtx.equation()));
         }
-        
-        context.setStateBody(stateName, bodyContent.toString());
+
+        // State bodies are emitted later from the collected assignments. Do not
+        // visit them here: doing so executes activate lowering before an
+        // operation scope exists and mutates Collections.emptyMap().
+        context.setStateBody(stateName, "");
     }
     
     /**
@@ -220,7 +249,29 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         for (ParseTree child : letBlock.children) {
             if (child instanceof SynlongParser.EquationContext) {
                 collectAssignmentFromEquation(stateName, (SynlongParser.EquationContext) child);
+            } else if (child instanceof SynlongParser.Activate_blockContext) {
+                collectActivateStateAssignments(stateName, (SynlongParser.Activate_blockContext) child);
             }
+        }
+    }
+
+    private void collectActivateStateAssignments(String stateName, SynlongParser.Activate_blockContext activate) {
+        String lowered = visit(activate);
+        if (lowered == null || lowered.trim().isEmpty()) {
+            return;
+        }
+        for (String equation : lowered.split(";\\s*\\n\\s*")) {
+            int eq = equation.indexOf('=');
+            if (eq <= 0) {
+                continue;
+            }
+            String lhs = equation.substring(0, eq).trim();
+            String rhs = equation.substring(eq + 1).trim();
+            String type = currentOpVariableTypes.get(lhs);
+            if (type != null && !context.isGlobalVariable(lhs)) {
+                context.addStateVarType(stateName, lhs, type);
+            }
+            context.addStateAssignment(stateName, lhs + " = " + rhs);
         }
     }
     
@@ -230,12 +281,52 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     private void collectAssignmentFromEquation(String stateName, SynlongParser.EquationContext equation) {
         if (equation instanceof SynlongParser.AssignmentContext) {
             SynlongParser.AssignmentContext assignment = (SynlongParser.AssignmentContext) equation;
+            if (collectFlattenStateAssignment(stateName, assignment)) {
+                return;
+            }
             String lhs = visit(assignment.lhs());
             String rhs = visit(assignment.expr());
+            String inferredType = inferObviousAssignmentType(assignment.expr());
+            List<String> lhsNames = lhsIds(assignment.lhs());
+            if (inferredType != null && lhsNames.size() == 1) {
+                context.addStateVarType(stateName, lhsNames.get(0), inferredType);
+            }
             if (lhs != null && rhs != null && !lhs.trim().isEmpty()) {
                 context.addStateAssignment(stateName, lhs + " = " + rhs);
             }
         }
+    }
+
+    private boolean collectFlattenStateAssignment(String stateName, SynlongParser.AssignmentContext assignment) {
+        List<String> lhsNames = lhsIds(assignment.lhs());
+        if (lhsNames.size() < 2 || !(assignment.expr() instanceof SynlongParser.ApplyExprContext)) {
+            return false;
+        }
+
+        SynlongParser.Apply_exprContext apply = ((SynlongParser.ApplyExprContext) assignment.expr()).apply_expr();
+        if (!(apply instanceof SynlongParser.SimpleApplyContext)) {
+            return false;
+        }
+        SynlongParser.SimpleApplyContext simpleApply = (SynlongParser.SimpleApplyContext) apply;
+        if (!(simpleApply.prefix_operator() instanceof SynlongParser.FlattenOpContext)) {
+            return false;
+        }
+
+        String structType = ((SynlongParser.FlattenOpContext) simpleApply.prefix_operator()).ID().getText();
+        Map<String, String> fields = context.getStructFields(structType);
+        List<String> arguments = visitListItems(simpleApply.list());
+        if (fields.size() != lhsNames.size() || arguments.size() != 1) {
+            return false;
+        }
+
+        String source = arguments.get(0);
+        int index = 0;
+        for (Map.Entry<String, String> field : fields.entrySet()) {
+            String lhsName = lhsNames.get(index++);
+            context.addStateVarType(stateName, lhsName, field.getValue());
+            context.addStateAssignment(stateName, lhsName + " = " + source + "." + field.getKey());
+        }
+        return true;
     }
     
     /**
@@ -251,7 +342,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
                     if (stateDecl.getChild(j) instanceof SynlongParser.TransitionContext) {
                         SynlongParser.TransitionContext trans = (SynlongParser.TransitionContext) stateDecl.getChild(j);
                         String condition = visit(trans);
-                        String target = trans.ID().getText();
+                        String target = context.getLustreState(trans.ID().getText());
                         String transition = "unless: " + condition + " -> " + target;
                         
                         // 避免重复添加相同的转换
@@ -266,7 +357,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
                     if (stateDecl.getChild(j) instanceof SynlongParser.TransitionContext) {
                         SynlongParser.TransitionContext trans = (SynlongParser.TransitionContext) stateDecl.getChild(j);
                         String condition = visit(trans);
-                        String target = trans.ID().getText();
+                        String target = context.getLustreState(trans.ID().getText());
                         String transition = "until: " + condition + " -> " + target;
                         
                         // 避免重复添加相同的转换
@@ -286,37 +377,34 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     private String generateLustreCode(SynlongParser.ProgramContext ctx) {
         StringBuilder sb = new StringBuilder();
         
-        // 1. 处理所有声明，收集类型和常量定义
+        // 类型已在 visitProgram 的预收集阶段生成；这里再生成常量和节点。
         for (SynlongParser.DeclsContext decl : ctx.decls()) {
-            if (decl instanceof SynlongParser.TypeDeclarationContext) {
-                visit(decl); // 这会调用visitType_block，将类型定义添加到全局收集器
-            } else if (decl instanceof SynlongParser.ConstDeclarationContext) {
-                visit(decl); // 这会调用visitConst_block，将常量定义添加到全局收集器
-            } else if (decl instanceof SynlongParser.UserOpDeclarationContext) {
-                visit(decl); // 这会调用visitUserOpDecl，将节点定义添加到全局收集器
+            if (decl instanceof SynlongParser.ConstDeclarationContext
+                    || decl instanceof SynlongParser.UserOpDeclarationContext) {
+                visit(decl);
             }
         }
         
-        // 2. 生成全局类型定义（包括状态枚举）
+        // 3. 生成全局类型定义（包括状态枚举）
         sb.append(generateGlobalTypeDefs());
 
-        // 3. 生成全局常量定义
+        // 4. 生成全局常量定义
         sb.append(generateGlobalConstDefs());
         sb.append("\n");
 
-        // 4. 生成结构体构造函数
+        // 5. 生成结构体构造函数
         String structConstructors = context.generateStructConstructors();
         if (!structConstructors.isEmpty()) {
             sb.append(structConstructors);
         }
 
-        // 5. 生成结构体flatten函数
+        // 6. 生成结构体flatten函数
         String flattenFunctions = context.generateFlattenFunctions();
         if (!flattenFunctions.isEmpty()) {
             sb.append(flattenFunctions);
         }
 
-        // 6. 生成节点和函数定义
+        // 7. 生成节点和函数定义
         for (String nodeDef : context.getGlobalNodeDefs()) {
             sb.append(nodeDef).append("\n");
         }
@@ -450,12 +538,13 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         StringBuilder sb = new StringBuilder();
         for (SynlongParser.Const_declContext constDecl : ctx.const_decl()) {
             String constDefStr = "const " + constDecl.ID().getText();
+            String typeExpr = null;
             if (constDecl.type_expr() != null) {
-                String typeExpr = visit(constDecl.type_expr());
+                typeExpr = visit(constDecl.type_expr());
                 constDefStr += " : " + typeExpr;
             }
             if (constDecl.const_expr() != null) {
-                String constValue = visit(constDecl.const_expr());
+                String constValue = renderConstExpr(constDecl.const_expr(), typeExpr);
                 constDefStr += " = " + constValue;
             }
             constDefStr += ";";
@@ -506,9 +595,23 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         
         Map<String, String> previousVariableTypes = currentOpVariableTypes;
         Set<String> previousReservedNames = currentOpReservedNames;
+        Map<String, String> previousLocalTypes = currentOpLocalTypes;
+        boolean previousHasStateMachine = currentOpHasStateMachine;
         Map<String, String> opVariableTypes = collectUserOpVariableTypes(ctx);
         currentOpVariableTypes = opVariableTypes;
         currentOpReservedNames = new LinkedHashSet<String>(opVariableTypes.keySet());
+        currentOpLocalTypes = new LinkedHashMap<String, String>();
+        currentOpHasStateMachine = containsStateMachine(ctx.op_body());
+        if (ctx.op_body() instanceof SynlongParser.FullOpBodyContext) {
+            SynlongParser.FullOpBodyContext fullBody = (SynlongParser.FullOpBodyContext) ctx.op_body();
+            collectLocalTypes(currentOpLocalTypes, fullBody.local_block());
+            for (Map.Entry<String, String> entry : currentOpLocalTypes.entrySet()) {
+                String inferredType = opVariableTypes.get(entry.getKey());
+                if (inferredType != null) {
+                    entry.setValue(inferredType);
+                }
+            }
+        }
         try {
             if (ctx.op_body() != null) {
                 String opBodyContent = visit(ctx.op_body());
@@ -517,6 +620,8 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         } finally {
             currentOpVariableTypes = previousVariableTypes;
             currentOpReservedNames = previousReservedNames;
+            currentOpLocalTypes = previousLocalTypes;
+            currentOpHasStateMachine = previousHasStateMachine;
         }
         
         // 添加到全局节点定义收集器
@@ -537,7 +642,127 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
                 collectLocalTypes(types, fullBody.local_block());
             }
         }
+        // Generated Scade declarations occasionally retain an imprecise scalar
+        // type. A few passes are enough for nearby equations (conditionals and
+        // comparisons) to propagate a more precise JKind-facing type.
+        for (int i = 0; i < 3; i++) {
+            applyObviousAssignmentTypes(ctx.op_body(), types);
+        }
         return types;
+    }
+
+    private boolean containsStateMachine(ParseTree tree) {
+        if (tree == null) {
+            return false;
+        }
+        if (tree instanceof SynlongParser.StateMachineReturnContext) {
+            return true;
+        }
+        for (int i = 0; i < tree.getChildCount(); i++) {
+            if (containsStateMachine(tree.getChild(i))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void applyObviousAssignmentTypes(ParseTree tree, Map<String, String> types) {
+        if (tree == null) {
+            return;
+        }
+        if (tree instanceof SynlongParser.AssignmentContext) {
+            SynlongParser.AssignmentContext assignment = (SynlongParser.AssignmentContext) tree;
+            List<String> lhsNames = lhsIds(assignment.lhs());
+            String inferredType = inferAssignmentType(assignment.expr(), types);
+            if (lhsNames.size() == 1 && inferredType != null && types.containsKey(lhsNames.get(0))) {
+                types.put(lhsNames.get(0), inferredType);
+            }
+        }
+        for (int i = 0; i < tree.getChildCount(); i++) {
+            applyObviousAssignmentTypes(tree.getChild(i), types);
+        }
+    }
+
+    private String inferObviousAssignmentType(SynlongParser.ExprContext expr) {
+        return inferAssignmentType(expr, currentOpVariableTypes);
+    }
+
+    private String inferAssignmentType(SynlongParser.ExprContext expr, Map<String, String> variableTypes) {
+        if (expr instanceof SynlongParser.SwitchExprContext) {
+            SynlongParser.Switch_exprContext switchExpr = ((SynlongParser.SwitchExprContext) expr).switch_expr();
+            if (switchExpr instanceof SynlongParser.IfThenElseContext) {
+                SynlongParser.IfThenElseContext conditional = (SynlongParser.IfThenElseContext) switchExpr;
+                return mergeExpressionTypes(
+                        inferSimpleType(conditional.simple_expr(1), variableTypes),
+                        inferSimpleType(conditional.simple_expr(2), variableTypes));
+            }
+        }
+        if (!(expr instanceof SynlongParser.SimpleExprContext)) {
+            return null;
+        }
+        return inferSimpleType(((SynlongParser.SimpleExprContext) expr).simple_expr(), variableTypes);
+    }
+
+    private String inferSimpleType(SynlongParser.Simple_exprContext simple, Map<String, String> variableTypes) {
+        if (simple instanceof SynlongParser.ScadeRealCastContext) {
+            return "real";
+        }
+        if (simple instanceof SynlongParser.TypeCastContext) {
+            return visit(((SynlongParser.TypeCastContext) simple).type_expr());
+        }
+        if (simple instanceof SynlongParser.StructAccessContext) {
+            SynlongParser.StructAccessContext access = (SynlongParser.StructAccessContext) simple;
+            String field = access.ID().getText();
+            if ("status".equals(field)) {
+                return "bool";
+            }
+            String ownerType = inferSimpleType(access.simple_expr(), variableTypes);
+            String structType = context.resolveStructTypeName(ownerType);
+            if (structType != null) {
+                return context.getStructFields(structType).get(field);
+            }
+        }
+        if (simple instanceof SynlongParser.BinRelOpContext
+                || simple instanceof SynlongParser.BinBoolOpContext) {
+            return "bool";
+        }
+        if (simple instanceof SynlongParser.SimpleIdContext) {
+            return variableTypes.get(((SynlongParser.SimpleIdContext) simple).ID().getText());
+        }
+        if (simple instanceof SynlongParser.SimpleAtomContext) {
+            String atom = simple.getText();
+            if ("true".equals(atom) || "false".equals(atom)) {
+                return "bool";
+            }
+            return atom.contains(".") || atom.contains("E") || atom.contains("e") ? "real" : "int";
+        }
+        if (simple instanceof SynlongParser.SimpleParenContext) {
+            return inferSimpleType(((SynlongParser.SimpleParenContext) simple).simple_expr(), variableTypes);
+        }
+        if (simple instanceof SynlongParser.UnaryOpContext) {
+            return inferSimpleType(((SynlongParser.UnaryOpContext) simple).simple_expr(), variableTypes);
+        }
+        if (simple instanceof SynlongParser.BinArithOpContext) {
+            SynlongParser.BinArithOpContext binary = (SynlongParser.BinArithOpContext) simple;
+            return mergeExpressionTypes(
+                    inferSimpleType(binary.simple_expr(0), variableTypes),
+                    inferSimpleType(binary.simple_expr(1), variableTypes));
+        }
+        return null;
+    }
+
+    private String mergeExpressionTypes(String left, String right) {
+        if (left == null) {
+            return right;
+        }
+        if (right == null || left.equals(right)) {
+            return left;
+        }
+        if (("real".equals(left) && "int".equals(right))
+                || ("int".equals(left) && "real".equals(right))) {
+            return "real";
+        }
+        return null;
     }
 
     private void collectParamTypes(Map<String, String> types, SynlongParser.ParamsContext params) {
@@ -628,11 +853,11 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         }
         
         // 2. 处理let_block
-        String letBlockContent = visit(ctx.let_block());
+        String letBlockContent = appendMissingLocalDefaults(visit(ctx.let_block()));
         
         // 3. 生成完整的var块（包括状态机变量和高阶展开临时变量）
         StringBuilder varBlock = new StringBuilder();
-        if (context.hasStateMachineVars()) {
+        if (currentOpHasStateMachine && context.hasStateMachineVars()) {
             varBlock.append("var\n");
             
             // 3.1 添加状态变量
@@ -696,6 +921,71 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         }
     }
 
+    private String appendMissingLocalDefaults(String letBlockContent) {
+        if (letBlockContent == null || currentOpLocalTypes.isEmpty()) {
+            return letBlockContent;
+        }
+        StringBuilder defaults = new StringBuilder();
+        for (Map.Entry<String, String> entry : currentOpLocalTypes.entrySet()) {
+            String name = entry.getKey();
+            String lhsPattern = "(?m)^\\s*[^=\\n]*\\b" + java.util.regex.Pattern.quote(name)
+                    + "\\b[^=\\n]*=";
+            if (!java.util.regex.Pattern.compile(lhsPattern).matcher(letBlockContent).find()) {
+                defaults.append("\t").append(name).append(" = ")
+                        .append(defaultValueForType(entry.getValue())).append(";\n");
+            }
+        }
+        if (defaults.length() == 0) {
+            return letBlockContent;
+        }
+        int tel = letBlockContent.lastIndexOf("tel\n");
+        if (tel < 0) {
+            return letBlockContent + defaults;
+        }
+        return letBlockContent.substring(0, tel) + defaults + letBlockContent.substring(tel);
+    }
+
+    private String defaultValueForType(String type) {
+        String resolved = context.resolveTypeAlias(type);
+        if ("bool".equals(resolved)) {
+            return "false";
+        }
+        if ("real".equals(resolved) || "float".equals(resolved)) {
+            return "0.0";
+        }
+        if ("int".equals(resolved) || "short".equals(resolved) || "ushort".equals(resolved)) {
+            return "0";
+        }
+        String structType = context.resolveStructTypeName(type);
+        if (structType != null) {
+            List<String> fields = new ArrayList<String>();
+            for (Map.Entry<String, String> field : context.getStructFields(structType).entrySet()) {
+                fields.add(field.getKey() + " = " + defaultValueForType(field.getValue()));
+            }
+            return structType + " {" + String.join("; ", fields) + "}";
+        }
+        if (resolved != null && resolved.endsWith("]")) {
+            int bracket = resolved.lastIndexOf('[');
+            try {
+                int count = Integer.parseInt(resolved.substring(bracket + 1, resolved.length() - 1));
+                String elementDefault = defaultValueForType(resolved.substring(0, bracket));
+                List<String> values = new ArrayList<String>();
+                for (int i = 0; i < count; i++) {
+                    values.add(elementDefault);
+                }
+                return "[" + String.join(", ", values) + "]";
+            } catch (NumberFormatException ignored) {
+                // Fall through to the conservative scalar default below.
+            }
+        }
+        if (resolved != null && resolved.startsWith("enum {") && resolved.endsWith("}")) {
+            String members = resolved.substring(6, resolved.length() - 1);
+            int comma = members.indexOf(',');
+            return (comma < 0 ? members : members.substring(0, comma)).trim();
+        }
+        return "0";
+    }
+
     @Override
     public String visitVar_decls(SynlongParser.Var_declsContext ctx) {
         StringBuilder sb = new StringBuilder();
@@ -706,15 +996,39 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
             }
         }
         String typeExpr = visit(ctx.type_expr());
+        if (!ctx.var_id().isEmpty()) {
+            String inferredType = currentOpVariableTypes.get(ctx.var_id(0).getText());
+            if (inferredType != null) {
+                boolean sameType = true;
+                for (SynlongParser.Var_idContext varId : ctx.var_id()) {
+                    if (!inferredType.equals(currentOpVariableTypes.get(varId.getText()))) {
+                        sameType = false;
+                        break;
+                    }
+                }
+                if (sameType) {
+                    typeExpr = inferredType;
+                }
+            }
+        }
         sb.append(" : ").append(typeExpr);
         return sb.toString();
     }
 
     @Override
     public String visitAssignment(SynlongParser.AssignmentContext ctx) {
+        if (ctx.lhs() instanceof SynlongParser.DiscardLhsContext) {
+            return "";
+        }
         String mapfold = tryVisitMapfoldAssignment(ctx);
         if (mapfold != null) {
             return mapfold;
+        }
+        List<String> lhsNames = lhsIds(ctx.lhs());
+        if (currentOpHasStateMachine && lhsNames.size() == 1
+                && context.hasStateAssignmentForVariable(lhsNames.get(0))) {
+            context.setStateAssignmentFallback(lhsNames.get(0), visit(ctx.expr()));
+            return "";
         }
         return visit(ctx.lhs()) + " = " + visit(ctx.expr());
     }
@@ -831,7 +1145,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     public String visitLhsList(SynlongParser.LhsListContext ctx) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < ctx.lhs_id().size(); i++) {
-            sb.append(ctx.lhs_id(i).getText());
+            sb.append(renameActivateIdentifier(ctx.lhs_id(i).getText()));
             if (i < ctx.lhs_id().size() - 1) {
                 sb.append(", ");
             }
@@ -844,6 +1158,11 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         return "";
     }
 
+    @Override
+    public String visitDiscardLhs(SynlongParser.DiscardLhsContext ctx) {
+        return "()";
+    }
+
     // 修复常量表达式转换
     @Override
     public String visitConstId(SynlongParser.ConstIdContext ctx) {
@@ -853,6 +1172,11 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     @Override
     public String visitConstAtom(SynlongParser.ConstAtomContext ctx) {
         return visit(ctx.atom());
+    }
+
+    @Override
+    public String visitConstParen(SynlongParser.ConstParenContext ctx) {
+        return "(" + visit(ctx.const_expr()) + ")";
     }
 
     @Override
@@ -889,6 +1213,55 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         return "[" + visit(ctx.const_list()) + "]";
     }
 
+    private String renderConstExpr(SynlongParser.Const_exprContext expr, String expectedType) {
+        String resolvedExpectedType = context.resolveTypeAlias(expectedType);
+        if (expr instanceof SynlongParser.ConstAtomContext) {
+            SynlongParser.AtomContext atom = ((SynlongParser.ConstAtomContext) expr).atom();
+            if ("real".equals(resolvedExpectedType) && atom instanceof SynlongParser.IntegerContext) {
+                return visit(atom) + ".0";
+            }
+            return visit(expr);
+        }
+        if (expr instanceof SynlongParser.ConstParenContext) {
+            SynlongParser.ConstParenContext paren = (SynlongParser.ConstParenContext) expr;
+            return "(" + renderConstExpr(paren.const_expr(), expectedType) + ")";
+        }
+        if (expr instanceof SynlongParser.ConstUnaryOpContext) {
+            SynlongParser.ConstUnaryOpContext unary = (SynlongParser.ConstUnaryOpContext) expr;
+            return unary.unary_arith_op().getText() + renderConstExpr(unary.const_expr(), expectedType);
+        }
+        if (expr instanceof SynlongParser.ConstBinArithOpContext) {
+            SynlongParser.ConstBinArithOpContext binary = (SynlongParser.ConstBinArithOpContext) expr;
+            return renderConstExpr(binary.const_expr(0), expectedType) + " "
+                    + visit(binary.bin_arith_op()) + " "
+                    + renderConstExpr(binary.const_expr(1), expectedType);
+        }
+        if (expr instanceof SynlongParser.ConstArrayContext) {
+            SynlongParser.ConstArrayContext array = (SynlongParser.ConstArrayContext) expr;
+            String elementType = context.resolveArrayElementType(expectedType);
+            List<String> elements = new ArrayList<>();
+            for (SynlongParser.Const_exprContext element : array.const_list().const_expr()) {
+                elements.add(renderConstExpr(element, elementType));
+            }
+            return "[" + String.join(", ", elements) + "]";
+        }
+        if (expr instanceof SynlongParser.ConstStructContext) {
+            SynlongParser.ConstStructContext struct = (SynlongParser.ConstStructContext) expr;
+            String structType = context.resolveStructTypeName(expectedType);
+            if (structType == null) {
+                return visit(expr);
+            }
+            Map<String, String> fieldTypes = context.getStructFields(structType);
+            List<String> fields = new ArrayList<>();
+            for (SynlongParser.Const_label_exprContext field : struct.const_label_expr()) {
+                String fieldName = field.ID().getText();
+                fields.add(fieldName + " = " + renderConstExpr(field.const_expr(), fieldTypes.get(fieldName)));
+            }
+            return structType + " {" + String.join("; ", fields) + "}";
+        }
+        return visit(expr);
+    }
+
     @Override
     public String visitSimpleExpr(SynlongParser.SimpleExprContext ctx) {
         // 调用内部的simple_expr()方法
@@ -896,6 +1269,11 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
             return visit(ctx.simple_expr());
         }
         return "";
+    }
+
+    @Override
+    public String visitSimpleLast(SynlongParser.SimpleLastContext ctx) {
+        return "pre(" + ctx.ID().getText() + ")";
     }
 
     @Override
@@ -997,6 +1375,10 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         String conditionalAssignments = context.generateStateMachineConditionalAssignments();
         if (!conditionalAssignments.isEmpty()) {
             sb.append("\n").append(conditionalAssignments);
+        }
+        for (Map.Entry<String, String> entry : context.getUnassignedStateVarTypes().entrySet()) {
+            sb.append("\t").append(entry.getKey()).append(" = ")
+                    .append(defaultValueForType(entry.getValue())).append(";\n");
         }
         
         return sb.toString();
@@ -1201,23 +1583,21 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     // 处理混合构造函数
     @Override
     public String visitMixedConstructor(SynlongParser.MixedConstructorContext ctx) {
-        // 处理 (make type)(value, status) 语法
-        if (ctx.getText().contains("make")) {
-            // 提取类型和值
-            String text = ctx.getText();
-            if (text.contains("(") && text.contains(")")) {
-                int start = text.indexOf("(");
-                int end = text.lastIndexOf(")");
-                if (start != -1 && end != -1) {
-                    String inner = text.substring(start + 1, end);
-                    String[] parts = inner.split(",");
-                    if (parts.length == 2) {
-                        return "{" + parts[0].trim() + ", " + parts[1].trim() + "}";
-                    }
-                }
+        SynlongParser.Mixed_constructorContext update = ctx.mixed_constructor();
+        String updated = renameActivateIdentifier(update.ID().getText());
+        String value = visit(update.simple_expr());
+        if (update.label_or_index().size() == 1) {
+            SynlongParser.Label_or_indexContext selector = update.label_or_index(0);
+            if (selector instanceof SynlongParser.IndexItemContext) {
+                SynlongParser.IndexItemContext index = (SynlongParser.IndexItemContext) selector;
+                return updated + "[" + visit(index.index().simple_expr()) + " := " + value + "]";
+            }
+            if (selector instanceof SynlongParser.LabelContext) {
+                SynlongParser.LabelContext label = (SynlongParser.LabelContext) selector;
+                return updated + " {" + label.ID().getText() + " := " + value + "}";
             }
         }
-        return ctx.getText();
+        throw new SynlongToLustreException("Unsupported nested structure update: " + ctx.getText());
     }
 
     // 处理状态机体
@@ -1251,7 +1631,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     @Override
     public String visitLet_block(SynlongParser.Let_blockContext ctx) {
         StringBuilder sb = new StringBuilder("let\n");
-        // 把子表达式的LET (equation | property | assertion | main | realizabilityInputs | ivc)* TEL都拼上
+        // 把 let 中的方程、属性和已降阶的 activate 块拼上。
         for (ParseTree child : ctx.children) {
             String childString = visit(child);
             if (childString != null && !childString.trim().isEmpty()) {
@@ -1260,6 +1640,206 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         }
         sb.append("tel\n");
         return sb.toString();
+    }
+
+    @Override
+    public String visitActivate_block(SynlongParser.Activate_blockContext ctx) {
+        List<ActivateLeaf> leaves = collectActivateIfChain(
+                ctx.activate_if_chain(), "", Collections.<ActivateAssignment>emptyList());
+        return emitActivateEquations(leaves);
+    }
+
+    private List<ActivateLeaf> collectActivateIfChain(SynlongParser.Activate_if_chainContext ctx,
+                                                       String parentCondition,
+                                                       List<ActivateAssignment> inheritedAssignments) {
+        String condition = visit(ctx.simple_expr());
+        List<ActivateLeaf> leaves = new ArrayList<ActivateLeaf>();
+        leaves.addAll(collectActivateBranch(
+                ctx.activate_branch(), andCondition(parentCondition, condition), inheritedAssignments));
+
+        String elseCondition = andCondition(parentCondition, "not (" + condition + ")");
+        if (ctx.activate_else().activate_if_chain() != null) {
+            leaves.addAll(collectActivateIfChain(
+                    ctx.activate_else().activate_if_chain(), elseCondition, inheritedAssignments));
+        } else {
+            leaves.addAll(collectActivateBranch(
+                    ctx.activate_else().activate_branch(), elseCondition, inheritedAssignments));
+        }
+        return leaves;
+    }
+
+    private List<ActivateLeaf> collectActivateBranch(SynlongParser.Activate_branchContext ctx,
+                                                      String condition,
+                                                      List<ActivateAssignment> inheritedAssignments) {
+        if (ctx.activate_block() != null) {
+            return collectActivateIfChain(
+                    ctx.activate_block().activate_if_chain(), condition, inheritedAssignments);
+        }
+
+        Map<String, String> previousRenames = currentActivateRenames;
+        Map<String, String> branchRenames = new LinkedHashMap<String, String>(previousRenames);
+        branchRenames.putAll(registerActivateLocals(ctx.local_block()));
+        currentActivateRenames = branchRenames;
+        try {
+            List<ActivateLeaf> leaves = new ArrayList<ActivateLeaf>();
+            leaves.add(new ActivateLeaf(condition, inheritedAssignments));
+
+            for (ParseTree child : ctx.let_block().children) {
+                if (child instanceof SynlongParser.AssignmentContext) {
+                    SynlongParser.AssignmentContext assignment = (SynlongParser.AssignmentContext) child;
+                    if (assignment.lhs() instanceof SynlongParser.DiscardLhsContext) {
+                        continue;
+                    }
+                    String lhs = visit(assignment.lhs());
+                    String rhs = visit(assignment.expr());
+                    List<String> lhsNames = lhsIds(assignment.lhs());
+                    String inferredType = inferAssignmentType(assignment.expr(), currentOpVariableTypes);
+                    if (lhsNames.size() == 1 && inferredType != null) {
+                        String generatedLhs = renameActivateIdentifier(lhsNames.get(0));
+                        currentOpVariableTypes.put(generatedLhs, inferredType);
+                        if (currentOpLocalTypes.containsKey(generatedLhs)) {
+                            currentOpLocalTypes.put(generatedLhs, inferredType);
+                        }
+                    }
+                    for (ActivateLeaf leaf : leaves) {
+                        leaf.assignments.add(new ActivateAssignment(lhs, rhs));
+                    }
+                } else if (child instanceof SynlongParser.Activate_blockContext) {
+                    List<ActivateLeaf> expanded = new ArrayList<ActivateLeaf>();
+                    for (ActivateLeaf leaf : leaves) {
+                        expanded.addAll(collectActivateIfChain(
+                                ((SynlongParser.Activate_blockContext) child).activate_if_chain(),
+                                leaf.condition, leaf.assignments));
+                    }
+                    leaves = expanded;
+                }
+            }
+            return leaves;
+        } finally {
+            currentActivateRenames = previousRenames;
+        }
+    }
+
+    private Map<String, String> registerActivateLocals(SynlongParser.Local_blockContext localBlock) {
+        Map<String, String> renames = new LinkedHashMap<String, String>();
+        if (localBlock == null) {
+            return renames;
+        }
+        for (SynlongParser.Var_declsContext varDecls : localBlock.var_decls()) {
+            String type = visit(varDecls.type_expr());
+            for (SynlongParser.Var_idContext varId : varDecls.var_id()) {
+                String sourceName = varId.getText();
+                String generatedName = sourceName;
+                if (currentOpReservedNames.contains(generatedName)) {
+                    generatedName = "__activate_" + sourceName;
+                    int suffix = 1;
+                    while (currentOpReservedNames.contains(generatedName)) {
+                        generatedName = "__activate_" + sourceName + "_" + suffix;
+                        suffix++;
+                    }
+                }
+                currentOpReservedNames.add(generatedName);
+                if (!collectingStateAssignments) {
+                    context.addGeneratedLocalVar(generatedName, type);
+                }
+                currentOpVariableTypes.put(generatedName, type);
+                currentOpLocalTypes.put(generatedName, type);
+                if (!sourceName.equals(generatedName)) {
+                    renames.put(sourceName, generatedName);
+                }
+            }
+        }
+        return renames;
+    }
+
+    private String renameActivateIdentifier(String identifier) {
+        String renamed = currentActivateRenames.get(identifier);
+        return renamed == null ? identifier : renamed;
+    }
+
+    private String emitActivateEquations(List<ActivateLeaf> leaves) {
+        Map<String, List<ConditionalValue>> valuesByLhs =
+                new LinkedHashMap<String, List<ConditionalValue>>();
+        for (ActivateLeaf leaf : leaves) {
+            Map<String, String> lastValueInLeaf = new LinkedHashMap<String, String>();
+            for (ActivateAssignment assignment : leaf.assignments) {
+                lastValueInLeaf.put(assignment.lhs, assignment.rhs);
+            }
+            for (Map.Entry<String, String> entry : lastValueInLeaf.entrySet()) {
+                List<ConditionalValue> values = valuesByLhs.get(entry.getKey());
+                if (values == null) {
+                    values = new ArrayList<ConditionalValue>();
+                    valuesByLhs.put(entry.getKey(), values);
+                }
+                values.add(new ConditionalValue(leaf.condition, entry.getValue()));
+            }
+        }
+
+        List<String> equations = new ArrayList<String>();
+        for (Map.Entry<String, List<ConditionalValue>> entry : valuesByLhs.entrySet()) {
+            List<ConditionalValue> values = removeDuplicateConditionalValues(entry.getValue());
+            String rhs = values.get(values.size() - 1).value;
+            for (int i = values.size() - 2; i >= 0; i--) {
+                ConditionalValue value = values.get(i);
+                rhs = "if " + value.condition + " then " + value.value + " else " + rhs;
+            }
+            equations.add(entry.getKey() + " = " + rhs);
+        }
+        return String.join(";\n\t", equations);
+    }
+
+    private List<ConditionalValue> removeDuplicateConditionalValues(List<ConditionalValue> values) {
+        List<ConditionalValue> result = new ArrayList<ConditionalValue>();
+        for (ConditionalValue value : values) {
+            boolean duplicate = false;
+            for (ConditionalValue existing : result) {
+                if (existing.value.equals(value.value)) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                result.add(value);
+            }
+        }
+        return result;
+    }
+
+    private String andCondition(String left, String right) {
+        if (left == null || left.isEmpty()) {
+            return right;
+        }
+        return "(" + left + ") and (" + right + ")";
+    }
+
+    private static final class ActivateLeaf {
+        private final String condition;
+        private final List<ActivateAssignment> assignments;
+
+        private ActivateLeaf(String condition, List<ActivateAssignment> inheritedAssignments) {
+            this.condition = condition;
+            this.assignments = new ArrayList<ActivateAssignment>(inheritedAssignments);
+        }
+    }
+
+    private static final class ActivateAssignment {
+        private final String lhs;
+        private final String rhs;
+
+        private ActivateAssignment(String lhs, String rhs) {
+            this.lhs = lhs;
+            this.rhs = rhs;
+        }
+    }
+
+    private static final class ConditionalValue {
+        private final String condition;
+        private final String value;
+
+        private ConditionalValue(String condition, String value) {
+            this.condition = condition;
+            this.value = value;
+        }
     }
 
     // 处理参数列表
@@ -1298,7 +1878,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     // 添加缺失的访问方法
     @Override
     public String visitSimpleId(SynlongParser.SimpleIdContext ctx) {
-        return ctx.ID().getText();
+        return renameActivateIdentifier(ctx.ID().getText());
     }
 
     @Override
@@ -1322,6 +1902,13 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         String op = visit(ctx.bin_arith_op());
         String right = visit(ctx.simple_expr(1));
         if (left != null && op != null && right != null) {
+            String leftType = context.resolveTypeAlias(inferSimpleType(ctx.simple_expr(0), currentOpVariableTypes));
+            String rightType = context.resolveTypeAlias(inferSimpleType(ctx.simple_expr(1), currentOpVariableTypes));
+            if ("real".equals(leftType) && "int".equals(rightType)) {
+                right = "real(" + right + ")";
+            } else if ("int".equals(leftType) && "real".equals(rightType)) {
+                left = "real(" + left + ")";
+            }
             return left + " " + op + " " + right;
         }
         return "";
@@ -1360,8 +1947,15 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     }
 
     @Override
-    public String visitSimpleIdWithParens(SynlongParser.SimpleIdWithParensContext ctx) {
-        return ctx.ID().getText();
+    public String visitSimpleParen(SynlongParser.SimpleParenContext ctx) {
+        return "(" + visit(ctx.simple_expr()) + ")";
+    }
+
+    @Override
+    public String visitScadeRealCast(SynlongParser.ScadeRealCastContext ctx) {
+        String expression = visit(ctx.simple_expr());
+        String sourceType = context.resolveTypeAlias(inferSimpleType(ctx.simple_expr(), currentOpVariableTypes));
+        return "real".equals(sourceType) ? expression : "real(" + expression + ")";
     }
 
 
@@ -1386,11 +1980,26 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
 
     @Override
     public String visitFbyExpr(SynlongParser.FbyExprContext ctx) {
-        String init = visit(ctx.simple_expr(0));
+        String next = visit(ctx.simple_expr(0));
         String delay = visit(ctx.const_expr());
-        String expr = visit(ctx.simple_expr(1));
-        if (init != null && delay != null && expr != null) {
-            return "fby(" + init + "; " + delay + "; " + expr + ")";
+        String initial = visit(ctx.simple_expr(1));
+        if (next != null && delay != null && initial != null) {
+            int ticks;
+            try {
+                ticks = Integer.parseInt(delay);
+            } catch (NumberFormatException e) {
+                throw new SynlongToLustreException("Unsupported fby delay '" + delay
+                        + "': JKind lowering requires a fixed positive integer");
+            }
+            if (ticks < 1) {
+                throw new SynlongToLustreException("Unsupported fby delay '" + delay
+                        + "': expected a positive integer");
+            }
+            String lowered = next;
+            for (int i = 0; i < ticks; i++) {
+                lowered = initial + " -> pre(" + lowered + ")";
+            }
+            return "(" + lowered + ")";
         }
         return "";
     }
@@ -1400,7 +2009,7 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
         String left = visit(ctx.simple_expr(0));
         String right = visit(ctx.simple_expr(1));
         if (left != null && right != null) {
-            return left + " fby " + right;
+            return left + " -> pre(" + right + ")";
         }
         return "";
     }
@@ -1539,6 +2148,16 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     @Override
     public String visitIteratorApply(SynlongParser.IteratorApplyContext ctx) {
         // 迭代器只在 HighOrderLowerer 支持范围内降阶；不支持的形式必须在进入 JKind 前失败。
+        String iterator = visit(ctx.iterator());
+        String op = visit(ctx.prefix_operator());
+        String count = visit(ctx.const_expr());
+        HighOrderLoweringResult result = highOrderLowerer.lowerIteratorWithSourceMap(iterator, op, count, visitListItems(ctx.list()));
+        context.addSourceMapEntries(result.getSourceMapEntries());
+        return result.getExpression();
+    }
+
+    @Override
+    public String visitLegacyIteratorApply(SynlongParser.LegacyIteratorApplyContext ctx) {
         String iterator = visit(ctx.iterator());
         String op = visit(ctx.prefix_operator());
         String count = visit(ctx.const_expr());
@@ -1696,12 +2315,13 @@ public class SynlongToLustreVisitor extends SynlongBaseVisitor<String> {
     public String visitConst_decl(SynlongParser.Const_declContext ctx) {
         StringBuilder sb = new StringBuilder();
         sb.append(ctx.ID().getText());
+        String typeExpr = null;
         if (ctx.type_expr() != null) {
-            String typeExpr = visit(ctx.type_expr());
+            typeExpr = visit(ctx.type_expr());
             sb.append(" : ").append(typeExpr);
         }
         if (ctx.const_expr() != null) {
-            String constValue = visit(ctx.const_expr());
+            String constValue = renderConstExpr(ctx.const_expr(), typeExpr);
             sb.append(" = ").append(constValue);
         }
         return sb.toString();

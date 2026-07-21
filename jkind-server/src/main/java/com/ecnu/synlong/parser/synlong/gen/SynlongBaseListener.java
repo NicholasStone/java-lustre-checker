@@ -1,4 +1,4 @@
-// Generated from /Users/wei/IdeaProjects/java-lustre-checker/jkind-server/src/main/java/com/ecnu/synlong/parser/synlong/Synlong.g4 by ANTLR 4.13.2
+// Generated from Synlong.g4 by ANTLR 4.13.2
 package com.ecnu.synlong.parser.synlong.gen;
 
 import org.antlr.v4.runtime.ParserRuleContext;
@@ -425,6 +425,18 @@ public class SynlongBaseListener implements SynlongListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterConstParen(SynlongParser.ConstParenContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitConstParen(SynlongParser.ConstParenContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterConstBinBoolOp(SynlongParser.ConstBinBoolOpContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -677,6 +689,18 @@ public class SynlongBaseListener implements SynlongListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterDiscardLhs(SynlongParser.DiscardLhsContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitDiscardLhs(SynlongParser.DiscardLhsContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterLhsList(SynlongParser.LhsListContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -804,6 +828,54 @@ public class SynlongBaseListener implements SynlongListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitLet_block(SynlongParser.Let_blockContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterActivate_block(SynlongParser.Activate_blockContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitActivate_block(SynlongParser.Activate_blockContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterActivate_if_chain(SynlongParser.Activate_if_chainContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitActivate_if_chain(SynlongParser.Activate_if_chainContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterActivate_else(SynlongParser.Activate_elseContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitActivate_else(SynlongParser.Activate_elseContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterActivate_branch(SynlongParser.Activate_branchContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitActivate_branch(SynlongParser.Activate_branchContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
@@ -941,6 +1013,18 @@ public class SynlongBaseListener implements SynlongListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterSimpleLast(SynlongParser.SimpleLastContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitSimpleLast(SynlongParser.SimpleLastContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterStructAccess(SynlongParser.StructAccessContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -977,6 +1061,18 @@ public class SynlongBaseListener implements SynlongListener {
 	 *
 	 * <p>The default implementation does nothing.</p>
 	 */
+	@Override public void enterSimpleParen(SynlongParser.SimpleParenContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitSimpleParen(SynlongParser.SimpleParenContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
 	@Override public void enterSimpleAtom(SynlongParser.SimpleAtomContext ctx) { }
 	/**
 	 * {@inheritDoc}
@@ -984,18 +1080,6 @@ public class SynlongBaseListener implements SynlongListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitSimpleAtom(SynlongParser.SimpleAtomContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void enterSimpleIdWithParens(SynlongParser.SimpleIdWithParensContext ctx) { }
-	/**
-	 * {@inheritDoc}
-	 *
-	 * <p>The default implementation does nothing.</p>
-	 */
-	@Override public void exitSimpleIdWithParens(SynlongParser.SimpleIdWithParensContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
@@ -1032,6 +1116,18 @@ public class SynlongBaseListener implements SynlongListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitBinArithOp(SynlongParser.BinArithOpContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterScadeRealCast(SynlongParser.ScadeRealCastContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitScadeRealCast(SynlongParser.ScadeRealCastContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *
@@ -1380,6 +1476,18 @@ public class SynlongBaseListener implements SynlongListener {
 	 * <p>The default implementation does nothing.</p>
 	 */
 	@Override public void exitIteratorApply(SynlongParser.IteratorApplyContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void enterLegacyIteratorApply(SynlongParser.LegacyIteratorApplyContext ctx) { }
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>The default implementation does nothing.</p>
+	 */
+	@Override public void exitLegacyIteratorApply(SynlongParser.LegacyIteratorApplyContext ctx) { }
 	/**
 	 * {@inheritDoc}
 	 *

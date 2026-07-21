@@ -72,6 +72,7 @@ const_decl
 const_expr
     : ID # ConstId
     | atom # ConstAtom
+    | '(' const_expr ')' # ConstParen
     | unary_arith_op const_expr # ConstUnaryOp
     | const_expr bin_arith_op const_expr # ConstBinArithOp
     | const_expr bin_bool_op const_expr # ConstBinBoolOp
@@ -149,6 +150,7 @@ equation
 
 lhs
     : '(' ')' # EmptyLhs
+    | '_' # DiscardLhs
     | lhs_id (',' lhs_id)* # LhsList
     ;
 
@@ -157,7 +159,7 @@ lhs_id
     ;
 
 return_statement
-    : RETURNS returns_var ';'
+    : RETURNS (returns_var | '..') ';'
     ;
 
 returns_var
@@ -190,7 +192,28 @@ state_body
     ;
 
 let_block
-    : LET (equation | property | assertion | main | realizabilityInputs | ivc)* TEL
+    : LET (equation | activate_block | property | assertion | main | realizabilityInputs | ivc)* TEL
+    ;
+
+// Scade-generated conditional activation blocks are lowered by the visitor to
+// ordinary Lustre equations. Each branch remains a normal local/let body, and
+// nested activate blocks are accepted both as a branch and inside a let block.
+activate_block
+    : 'activate' ID activate_if_chain RETURNS '..' ';'
+    ;
+
+activate_if_chain
+    : IF simple_expr 'then' activate_branch 'else' activate_else
+    ;
+
+activate_else
+    : activate_if_chain
+    | activate_branch
+    ;
+
+activate_branch
+    : local_block? let_block
+    | activate_block
     ;
 
 transition
@@ -215,6 +238,7 @@ expr
 simple_expr
     : ID # SimpleId
     | atom # SimpleAtom
+    | 'last' '\'' ID # SimpleLast
     | simple_expr '[' const_expr ']' # ArrayAccess
     | simple_expr '.' ID # StructAccess
     | unary_arith_op simple_expr # UnaryOp
@@ -222,7 +246,8 @@ simple_expr
     | simple_expr bin_bool_op simple_expr # BinBoolOp
     | simple_expr bin_relation_op simple_expr # BinRelOp
     | '(' type_expr simple_expr ')' # TypeCast
-    | '(' ID ')' # SimpleIdWithParens
+    | 'real' simple_expr # ScadeRealCast
+    | '(' simple_expr ')' # SimpleParen
     ;
 
 tempo_expr
@@ -289,6 +314,7 @@ pattern
 apply_expr
     : prefix_operator '(' list ')' # SimpleApply
     | '(' iterator '<<' prefix_operator ';' const_expr '>>' ')' '(' list ')' # IteratorApply
+    | iterator '<<' prefix_operator ',' const_expr '>>' '(' list ')' # LegacyIteratorApply
     | '(' 'mapw' '<<' prefix_operator ';' const_expr '>>' 'if' simple_expr 'default' '(' list ')' ')' '(' list ')' # MapwApply
     | '(' 'mapwi' '<<' prefix_operator ';' const_expr '>>' 'if' simple_expr 'default' '(' list ')' ')' '(' list ')' # MapwiApply
     | '(' 'foldw' '<<' prefix_operator ';' const_expr '>>' 'if' simple_expr ')' '(' list ')' # FoldwApply

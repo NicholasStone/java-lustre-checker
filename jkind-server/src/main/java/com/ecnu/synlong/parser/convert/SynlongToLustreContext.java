@@ -30,6 +30,7 @@ public class SynlongToLustreContext {
     // 状态局部变量的类型与赋值必须一起保存，后续才能决定是否加状态名前缀。
     private final Map<String, Map<String, String>> stateVarTypes = new LinkedHashMap<>(); // stateName -> (varName -> type)
     private final Map<String, List<String>> stateAssignments = new LinkedHashMap<>(); // stateName -> list of assignments
+    private final Map<String, String> stateAssignmentFallbacks = new LinkedHashMap<>();
     
     // 全局定义按最终 Lustre 输出顺序累积，helperNodeDefs 负责避免重复/冲突的辅助节点。
     private final List<String> globalTypeDefs = new ArrayList<>();
@@ -75,6 +76,28 @@ public class SynlongToLustreContext {
             current = typeAliases.get(current);
         }
         return current;
+    }
+
+    public String resolveStructTypeName(String type) {
+        String current = type;
+        Set<String> seen = new LinkedHashSet<>();
+        while (current != null && !seen.contains(current)) {
+            seen.add(current);
+            if (structFields.containsKey(current)) {
+                return current;
+            }
+            current = typeAliases.get(current);
+        }
+        return null;
+    }
+
+    public String resolveArrayElementType(String type) {
+        String resolved = resolveTypeAlias(type);
+        if (resolved == null || !resolved.endsWith("]")) {
+            return null;
+        }
+        int bracket = resolved.lastIndexOf('[');
+        return bracket > 0 ? resolved.substring(0, bracket) : null;
     }
 
     public void addGeneratedLocalVar(String name, String type) {
@@ -202,6 +225,22 @@ public class SynlongToLustreContext {
     
     public List<String> getStateAssignments(String stateName) {
         return stateAssignments.getOrDefault(stateName, Collections.emptyList());
+    }
+
+    public boolean hasStateAssignmentForVariable(String variable) {
+        for (List<String> assignments : stateAssignments.values()) {
+            for (String assignment : assignments) {
+                int eq = assignment.indexOf('=');
+                if (eq > 0 && variable.equals(assignment.substring(0, eq).trim())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public void setStateAssignmentFallback(String variable, String rhs) {
+        stateAssignmentFallbacks.put(variable, rhs);
     }
     
     // 获取所有状态局部变量的类型信息（带前缀）
@@ -374,7 +413,7 @@ public class SynlongToLustreContext {
                 sb.append("\t-- Variable ").append(varName).append(" assignment\n");
                 sb.append("\t").append(varName).append(" = if (state = ").append(assignment.stateName)
                   .append(") then ").append(assignment.rhs)
-                  .append(" else pre(").append(varName).append(");\n");
+                  .append(" else ").append(stateFallback(varName)).append(";\n");
             } else {
                 // 多个状态的赋值，生成if-else链
                 sb.append("\t-- Variable ").append(varName).append(" assignments (merged)\n");
@@ -388,11 +427,24 @@ public class SynlongToLustreContext {
                         sb.append(" else if (state = ").append(assignment.stateName).append(") then ").append(assignment.rhs);
                     }
                 }
-                sb.append(" else pre(").append(varName).append(");\n");
+                sb.append(" else ").append(stateFallback(varName)).append(";\n");
             }
         }
         
         return sb.toString();
+    }
+
+    private String stateFallback(String variable) {
+        String fallback = stateAssignmentFallbacks.get(variable);
+        return fallback == null ? "pre(" + variable + ")" : fallback;
+    }
+
+    public Map<String, String> getUnassignedStateVarTypes() {
+        Map<String, String> unassigned = new LinkedHashMap<>(getUniqueStateVars());
+        for (String assigned : groupAssignmentsByVariable().keySet()) {
+            unassigned.remove(assigned);
+        }
+        return unassigned;
     }
     
     // 按变量分组赋值语句
@@ -473,7 +525,11 @@ public class SynlongToLustreContext {
                 // 只有非全局的状态变量才需要添加前缀
                 if (stateName.equals(currentStateName) && !isGlobalVariable(varName) && processedRhs.contains(varName)) {
                     // 简单的字符串替换，实际应该使用更精确的解析
-                    processedRhs = processedRhs.replaceAll("\\b" + varName + "\\b", getPrefixedVarName(stateName, varName));
+                    // A state-local identifier may share its name with a record
+                    // field (for example, local `value` and `input.value`). Do
+                    // not rewrite identifiers immediately following a dot.
+                    processedRhs = processedRhs.replaceAll("(?<!\\.)\\b" + varName + "\\b",
+                            getPrefixedVarName(stateName, varName));
                 }
             }
         }

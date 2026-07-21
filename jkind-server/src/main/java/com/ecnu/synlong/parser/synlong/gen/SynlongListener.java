@@ -1,4 +1,4 @@
-// Generated from /Users/wei/IdeaProjects/java-lustre-checker/jkind-server/src/main/java/com/ecnu/synlong/parser/synlong/Synlong.g4 by ANTLR 4.13.2
+// Generated from Synlong.g4 by ANTLR 4.13.2
 package com.ecnu.synlong.parser.synlong.gen;
 import org.antlr.v4.runtime.tree.ParseTreeListener;
 
@@ -402,6 +402,18 @@ public interface SynlongListener extends ParseTreeListener {
 	 */
 	void exitConstBinRelOp(SynlongParser.ConstBinRelOpContext ctx);
 	/**
+	 * Enter a parse tree produced by the {@code ConstParen}
+	 * labeled alternative in {@link SynlongParser#const_expr}.
+	 * @param ctx the parse tree
+	 */
+	void enterConstParen(SynlongParser.ConstParenContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code ConstParen}
+	 * labeled alternative in {@link SynlongParser#const_expr}.
+	 * @param ctx the parse tree
+	 */
+	void exitConstParen(SynlongParser.ConstParenContext ctx);
+	/**
 	 * Enter a parse tree produced by the {@code ConstBinBoolOp}
 	 * labeled alternative in {@link SynlongParser#const_expr}.
 	 * @param ctx the parse tree
@@ -636,6 +648,18 @@ public interface SynlongListener extends ParseTreeListener {
 	 */
 	void exitEmptyLhs(SynlongParser.EmptyLhsContext ctx);
 	/**
+	 * Enter a parse tree produced by the {@code DiscardLhs}
+	 * labeled alternative in {@link SynlongParser#lhs}.
+	 * @param ctx the parse tree
+	 */
+	void enterDiscardLhs(SynlongParser.DiscardLhsContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code DiscardLhs}
+	 * labeled alternative in {@link SynlongParser#lhs}.
+	 * @param ctx the parse tree
+	 */
+	void exitDiscardLhs(SynlongParser.DiscardLhsContext ctx);
+	/**
 	 * Enter a parse tree produced by the {@code LhsList}
 	 * labeled alternative in {@link SynlongParser#lhs}.
 	 * @param ctx the parse tree
@@ -755,6 +779,46 @@ public interface SynlongListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitLet_block(SynlongParser.Let_blockContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link SynlongParser#activate_block}.
+	 * @param ctx the parse tree
+	 */
+	void enterActivate_block(SynlongParser.Activate_blockContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SynlongParser#activate_block}.
+	 * @param ctx the parse tree
+	 */
+	void exitActivate_block(SynlongParser.Activate_blockContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link SynlongParser#activate_if_chain}.
+	 * @param ctx the parse tree
+	 */
+	void enterActivate_if_chain(SynlongParser.Activate_if_chainContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SynlongParser#activate_if_chain}.
+	 * @param ctx the parse tree
+	 */
+	void exitActivate_if_chain(SynlongParser.Activate_if_chainContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link SynlongParser#activate_else}.
+	 * @param ctx the parse tree
+	 */
+	void enterActivate_else(SynlongParser.Activate_elseContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SynlongParser#activate_else}.
+	 * @param ctx the parse tree
+	 */
+	void exitActivate_else(SynlongParser.Activate_elseContext ctx);
+	/**
+	 * Enter a parse tree produced by {@link SynlongParser#activate_branch}.
+	 * @param ctx the parse tree
+	 */
+	void enterActivate_branch(SynlongParser.Activate_branchContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link SynlongParser#activate_branch}.
+	 * @param ctx the parse tree
+	 */
+	void exitActivate_branch(SynlongParser.Activate_branchContext ctx);
 	/**
 	 * Enter a parse tree produced by {@link SynlongParser#transition}.
 	 * @param ctx the parse tree
@@ -886,6 +950,18 @@ public interface SynlongListener extends ParseTreeListener {
 	 */
 	void exitSimpleId(SynlongParser.SimpleIdContext ctx);
 	/**
+	 * Enter a parse tree produced by the {@code SimpleLast}
+	 * labeled alternative in {@link SynlongParser#simple_expr}.
+	 * @param ctx the parse tree
+	 */
+	void enterSimpleLast(SynlongParser.SimpleLastContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code SimpleLast}
+	 * labeled alternative in {@link SynlongParser#simple_expr}.
+	 * @param ctx the parse tree
+	 */
+	void exitSimpleLast(SynlongParser.SimpleLastContext ctx);
+	/**
 	 * Enter a parse tree produced by the {@code StructAccess}
 	 * labeled alternative in {@link SynlongParser#simple_expr}.
 	 * @param ctx the parse tree
@@ -922,6 +998,18 @@ public interface SynlongListener extends ParseTreeListener {
 	 */
 	void exitUnaryOp(SynlongParser.UnaryOpContext ctx);
 	/**
+	 * Enter a parse tree produced by the {@code SimpleParen}
+	 * labeled alternative in {@link SynlongParser#simple_expr}.
+	 * @param ctx the parse tree
+	 */
+	void enterSimpleParen(SynlongParser.SimpleParenContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code SimpleParen}
+	 * labeled alternative in {@link SynlongParser#simple_expr}.
+	 * @param ctx the parse tree
+	 */
+	void exitSimpleParen(SynlongParser.SimpleParenContext ctx);
+	/**
 	 * Enter a parse tree produced by the {@code SimpleAtom}
 	 * labeled alternative in {@link SynlongParser#simple_expr}.
 	 * @param ctx the parse tree
@@ -933,18 +1021,6 @@ public interface SynlongListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitSimpleAtom(SynlongParser.SimpleAtomContext ctx);
-	/**
-	 * Enter a parse tree produced by the {@code SimpleIdWithParens}
-	 * labeled alternative in {@link SynlongParser#simple_expr}.
-	 * @param ctx the parse tree
-	 */
-	void enterSimpleIdWithParens(SynlongParser.SimpleIdWithParensContext ctx);
-	/**
-	 * Exit a parse tree produced by the {@code SimpleIdWithParens}
-	 * labeled alternative in {@link SynlongParser#simple_expr}.
-	 * @param ctx the parse tree
-	 */
-	void exitSimpleIdWithParens(SynlongParser.SimpleIdWithParensContext ctx);
 	/**
 	 * Enter a parse tree produced by the {@code BinRelOp}
 	 * labeled alternative in {@link SynlongParser#simple_expr}.
@@ -981,6 +1057,18 @@ public interface SynlongListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitBinArithOp(SynlongParser.BinArithOpContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code ScadeRealCast}
+	 * labeled alternative in {@link SynlongParser#simple_expr}.
+	 * @param ctx the parse tree
+	 */
+	void enterScadeRealCast(SynlongParser.ScadeRealCastContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code ScadeRealCast}
+	 * labeled alternative in {@link SynlongParser#simple_expr}.
+	 * @param ctx the parse tree
+	 */
+	void exitScadeRealCast(SynlongParser.ScadeRealCastContext ctx);
 	/**
 	 * Enter a parse tree produced by the {@code BinBoolOp}
 	 * labeled alternative in {@link SynlongParser#simple_expr}.
@@ -1317,6 +1405,18 @@ public interface SynlongListener extends ParseTreeListener {
 	 * @param ctx the parse tree
 	 */
 	void exitIteratorApply(SynlongParser.IteratorApplyContext ctx);
+	/**
+	 * Enter a parse tree produced by the {@code LegacyIteratorApply}
+	 * labeled alternative in {@link SynlongParser#apply_expr}.
+	 * @param ctx the parse tree
+	 */
+	void enterLegacyIteratorApply(SynlongParser.LegacyIteratorApplyContext ctx);
+	/**
+	 * Exit a parse tree produced by the {@code LegacyIteratorApply}
+	 * labeled alternative in {@link SynlongParser#apply_expr}.
+	 * @param ctx the parse tree
+	 */
+	void exitLegacyIteratorApply(SynlongParser.LegacyIteratorApplyContext ctx);
 	/**
 	 * Enter a parse tree produced by the {@code MapwApply}
 	 * labeled alternative in {@link SynlongParser#apply_expr}.
